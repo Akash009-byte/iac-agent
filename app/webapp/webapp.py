@@ -216,8 +216,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     
                     # Check if the original response contains create_key_pair tool call
                     original_response_str = str(original_response)
-                    if "create_key_pair" in original_response_str.lower():
-                        print(f"🔍 create_key_pair tool detected in original response")
+                    # Also check if the cleaned response contains the private key removal marker
+                    if "create_key_pair" in original_response_str.lower() or "[PRIVATE KEY REMOVED FOR SECURITY]" in agent_response:
+                        print(f"🔍 create_key_pair tool detected in original response or private key removal marker found")
                         
                         # Extract key information from the response
                         try:

@@ -101,28 +101,20 @@ def interactive_agent(message: str) -> str:
                         except Exception as e:
                             print(f"❌ Error saving SSH key: {e}")
                     
-                    # Create clean response without private key
-                    response_text = f"""✅ Key pair created successfully!
-
-Key Pair Details:
-- Key Name: {key_name}
-- Key Pair ID: {key_pair_id}
-- Region: {region}
-
-🔑 **SSH Key Ready for Download**
-Your SSH key '{key_name}' has been created and is ready for download.
-
-⚠️ **Important Security Notes:**
-1. Save this private key to a secure location (e.g., ~/.ssh/{key_name}.pem)
-2. Set proper permissions: chmod 400 ~/.ssh/{key_name}.pem
-3. Never share this private key publicly
-4. Use this key to SSH into your EC2 instances
-5. AWS does not store the private key - this is your only copy!
-
-SSH Usage Example:
-ssh -i ~/.ssh/{key_name}.pem ec2-user@<instance-public-ip>
-
-🔗 **Download your SSH key using the download button below.**"""
+                    # Remove private key content but preserve the rest of the response
+                    # Find the private key section and remove it
+                    private_key_patterns = [
+                        r'```\n(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)\n```',
+                        r'```(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)```',
+                        r'(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)',
+                        r'PRIVATE KEY.*?\n(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)'
+                    ]
+                    
+                    cleaned_response = response_text
+                    for pattern in private_key_patterns:
+                        cleaned_response = re.sub(pattern, '[PRIVATE KEY REMOVED FOR SECURITY]', cleaned_response, flags=re.DOTALL | re.IGNORECASE)
+                    
+                    response_text = cleaned_response
         
         # Method 2: Check if result has messages (fallback)
         if not response_text and hasattr(result, 'messages') and result.messages:
