@@ -226,13 +226,16 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     
                     # Debug logging
                     print(f"🔍 Key pair detection debug:")
-                    print(f"   Response length: {len(agent_response)}")
+                    print(f"   Original response length: {len(str(original_response))}")
+                    print(f"   Cleaned response length: {len(agent_response)}")
                     print(f"   Contains 'key pair' + 'created successfully': {key_pair_indicators[0]}")
                     print(f"   Contains 'ssh key' + 'ready for download': {key_pair_indicators[1]}")
                     print(f"   Contains 'download your ssh key': {key_pair_indicators[2]}")
                     print(f"   Contains 'key pair details:': {key_pair_indicators[3]}")
                     print(f"   Contains 'ssh usage example:': {key_pair_indicators[4]}")
                     print(f"   Contains 'download button below': {key_pair_indicators[5]}")
+                    print(f"   Original response preview: {str(original_response)[:200]}...")
+                    print(f"   Cleaned response preview: {agent_response[:200]}...")
                     
                     if any(key_pair_indicators):
                         print(f"✅ Key pair creation detected!")
@@ -306,63 +309,25 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 if private_key:
                                     break
                             
-                            if private_key:
-                                print(f"✅ Private key extracted successfully, length: {len(private_key)}")
+                            # Check if the key file exists (saved by agent wrapper)
+                            ssh_dir = os.path.join(os.path.dirname(__file__), "..", "ssh")
+                            key_file_path = os.path.join(ssh_dir, f"{key_name}.pem")
+                            
+                            if os.path.exists(key_file_path):
+                                print(f"✅ SSH key file exists: {key_file_path}")
                                 
-                                # Save the key to a file
-                                ssh_dir = os.path.join(os.path.dirname(__file__), "..", "ssh")
-                                os.makedirs(ssh_dir, exist_ok=True)
+                                # Create download info
+                                download_info = {
+                                    "key_name": key_name,
+                                    "file_name": f"{key_name}.pem",
+                                    "download_url": f"/api/download-file/{key_name}.pem",
+                                    "instructions": f"Your SSH key '{key_name}' is ready for download. Click the download button below to save it securely."
+                                }
                                 
-                                key_file_path = os.path.join(ssh_dir, f"{key_name}.pem")
-                                
-                                try:
-                                    with open(key_file_path, 'w') as f:
-                                        f.write(private_key)
-                                    
-                                    # Set proper permissions (chmod 400)
-                                    os.chmod(key_file_path, 0o400)
-                                    
-                                    print(f"✅ SSH key saved to: {key_file_path}")
-                                    
-                                    # Create download info
-                                    download_info = {
-                                        "key_name": key_name,
-                                        "file_name": f"{key_name}.pem",
-                                        "download_url": f"/api/download-file/{key_name}.pem",
-                                        "instructions": f"Your SSH key '{key_name}' is ready for download. Click the download button below to save it securely."
-                                    }
-                                    
-                                    print(f"✅ Download info created: {download_info}")
-                                    
-                                    # Add download info to the response (without showing private key)
-                                    agent_response = f"""✅ Key pair created successfully!
-
-Key Pair Details:
-- Key Name: {key_name}
-- Key Pair ID: {key_pair_id}
-- Region: {region}
-
-🔑 **SSH Key Ready for Download**
-Your SSH key '{key_name}' has been created and is ready for download.
-
-⚠️ **Important Security Notes:**
-1. Save this private key to a secure location (e.g., ~/.ssh/{key_name}.pem)
-2. Set proper permissions: chmod 400 ~/.ssh/{key_name}.pem
-3. Never share this private key publicly
-4. Use this key to SSH into your EC2 instances
-5. AWS does not store the private key - this is your only copy!
-
-SSH Usage Example:
-ssh -i ~/.ssh/{key_name}.pem ec2-user@<instance-public-ip>
-
-🔗 **Download your SSH key using the download button below.**"""
-                                    
-                                except Exception as file_error:
-                                    print(f"❌ Error saving SSH key to file: {file_error}")
-                                    download_info = None
+                                print(f"✅ Download info created: {download_info}")
                             else:
-                                print(f"❌ Private key content not found in expected format")
-                                print(f"Response preview: {agent_response[:500]}...")
+                                print(f"❌ SSH key file not found: {key_file_path}")
+                                download_info = None
                         except Exception as e:
                             print(f"❌ Error during key extraction/storage: {e}")
                             import traceback
@@ -382,6 +347,9 @@ ssh -i ~/.ssh/{key_name}.pem ec2-user@<instance-public-ip>
                     # Add download info if available
                     if download_info:
                         response_message["download_info"] = download_info
+                        print(f"✅ Added download_info to WebSocket message: {download_info}")
+                    else:
+                        print(f"❌ No download_info to add to WebSocket message")
                     
                     await manager.send_personal_message(json.dumps(response_message), websocket)
                     manager.add_to_history(user_id, "assistant", agent_response)
