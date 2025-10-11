@@ -211,42 +211,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         lambda: interactive_agent(user_message)
                     )
                     
-                    # Check if the response contains a private key (key pair creation)
+                    # Check if create_key_pair tool was called in the original response
                     download_info = None
                     
-                    # Enhanced detection patterns for key pair creation
-                    key_pair_indicators = [
-                        "key pair" in agent_response.lower() and "created successfully" in agent_response.lower(),
-                        "ssh key" in agent_response.lower() and "ready for download" in agent_response.lower(),
-                        "download your ssh key" in agent_response.lower(),
-                        "key pair details:" in agent_response.lower(),
-                        "ssh usage example:" in agent_response.lower(),
-                        "download button below" in agent_response.lower()
-                    ]
-                    
-                    # Debug logging
-                    print(f"🔍 Key pair detection debug:")
-                    print(f"   Original response length: {len(str(original_response))}")
-                    print(f"   Cleaned response length: {len(agent_response)}")
-                    print(f"   Contains 'key pair' + 'created successfully': {key_pair_indicators[0]}")
-                    print(f"   Contains 'ssh key' + 'ready for download': {key_pair_indicators[1]}")
-                    print(f"   Contains 'download your ssh key': {key_pair_indicators[2]}")
-                    print(f"   Contains 'key pair details:': {key_pair_indicators[3]}")
-                    print(f"   Contains 'ssh usage example:': {key_pair_indicators[4]}")
-                    print(f"   Contains 'download button below': {key_pair_indicators[5]}")
-                    print(f"   Original response preview: {str(original_response)[:200]}...")
-                    print(f"   Cleaned response preview: {agent_response[:200]}...")
-                    
-                    if any(key_pair_indicators):
-                        print(f"✅ Key pair creation detected!")
+                    # Check if the original response contains create_key_pair tool call
+                    original_response_str = str(original_response)
+                    if "create_key_pair" in original_response_str.lower():
+                        print(f"🔍 create_key_pair tool detected in original response")
                         
                         # Extract key information from the response
                         try:
-                            # Generate a unique key ID for download
-                            key_id = str(uuid.uuid4())
+                            import re
                             
                             # Extract key name from the response (look for various patterns)
-                            import re
                             key_name_patterns = [
                                 r'Key Name:\s*([^\n]+)',
                                 r'key pair named?\s*[\'"]?([^\s\'"\n]+)',
@@ -260,53 +237,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 match = re.search(pattern, agent_response, re.IGNORECASE)
                                 if match:
                                     key_name = match.group(1).strip()
-                                    break
-                            
-                            # Extract key pair ID
-                            key_pair_id_patterns = [
-                                r'Key Pair ID:\s*([^\n]+)',
-                                r'key pair id:\s*([^\n]+)',
-                                r'key-([a-f0-9]+)'
-                            ]
-                            
-                            key_pair_id = "unknown"
-                            for pattern in key_pair_id_patterns:
-                                match = re.search(pattern, agent_response, re.IGNORECASE)
-                                if match:
-                                    key_pair_id = match.group(1).strip()
-                                    break
-                            
-                            # Extract region
-                            region_patterns = [
-                                r'Region:\s*([^\n]+)',
-                                r'in\s+([a-z0-9-]+)',
-                                r'region\s+([a-z0-9-]+)'
-                            ]
-                            
-                            region = "us-east-1"
-                            for pattern in region_patterns:
-                                match = re.search(pattern, agent_response, re.IGNORECASE)
-                                if match:
-                                    region = match.group(1).strip()
-                                    break
-                            
-                            # Extract the private key content from original response (multiple patterns)
-                            private_key_patterns = [
-                                r'```\n(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)\n```',
-                                r'```(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)```',
-                                r'(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)',
-                                r'PRIVATE KEY.*?\n(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)'
-                            ]
-                            
-                            private_key = None
-                            # Search in original response first, then cleaned response
-                            for response_text in [str(original_response), agent_response]:
-                                for pattern in private_key_patterns:
-                                    match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
-                                    if match:
-                                        private_key = match.group(1).strip()
-                                        break
-                                if private_key:
                                     break
                             
                             # Check if the key file exists (saved by agent wrapper)
@@ -333,8 +263,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             import traceback
                             traceback.print_exc()
                     else:
-                        print(f"❌ Key pair creation not detected based on keywords")
-                        print(f"Response preview: {agent_response[:200]}...")
+                        print(f"🔍 No create_key_pair tool detected - skipping download button check")
                     
                     # Send agent response
                     response_message = {
