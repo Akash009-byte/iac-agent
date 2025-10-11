@@ -30,6 +30,96 @@ def get_aws_client(service_name: str, region: str):
     return session.client(service_name, region_name=region)
 
 
+def validate_required_params(params: dict, required_fields: list) -> tuple[bool, str]:
+    """
+    Validate that all required parameters are provided
+    
+    Args:
+        params: Dictionary of parameters to validate
+        required_fields: List of required field names
+        
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    missing_fields = []
+    for field in required_fields:
+        if field not in params or params[field] is None or params[field] == "":
+            missing_fields.append(field)
+    
+    if missing_fields:
+        return False, f"Missing required parameters: {', '.join(missing_fields)}"
+    
+    return True, ""
+
+
+def validate_ec2_creation_params(region: str, instance_type: str, instance_name: str) -> tuple[bool, str]:
+    """Validate EC2 instance creation parameters"""
+    required_fields = ['region', 'instance_type', 'instance_name']
+    params = {
+        'region': region,
+        'instance_type': instance_type,
+        'instance_name': instance_name
+    }
+    return validate_required_params(params, required_fields)
+
+
+def validate_security_group_creation_params(region: str, group_name: str, description: str) -> tuple[bool, str]:
+    """Validate security group creation parameters"""
+    required_fields = ['region', 'group_name', 'description']
+    params = {
+        'region': region,
+        'group_name': group_name,
+        'description': description
+    }
+    return validate_required_params(params, required_fields)
+
+
+def validate_rule_addition_params(region: str, security_group_id: str, protocol: str, port: int, ip_range: str) -> tuple[bool, str]:
+    """Validate security group rule addition parameters"""
+    required_fields = ['region', 'security_group_id', 'protocol', 'port', 'ip_range']
+    params = {
+        'region': region,
+        'security_group_id': security_group_id,
+        'protocol': protocol,
+        'port': port,
+        'ip_range': ip_range
+    }
+    return validate_required_params(params, required_fields)
+
+
+@tool
+def get_data_collection_status(operation: str, collected_data: dict) -> str:
+    """
+    Check what information has been collected for an operation
+    
+    Args:
+        operation: The operation being performed (e.g., 'create_ec2_instance', 'create_security_group')
+        collected_data: Dictionary of data collected so far
+        
+    Returns:
+        Status of data collection with missing fields
+    """
+    required_fields = {
+        'create_ec2_instance': ['region', 'instance_type', 'instance_name'],
+        'create_security_group': ['region', 'group_name', 'description'],
+        'add_inbound_rule': ['region', 'security_group_id', 'protocol', 'port', 'source_ip'],
+        'add_outbound_rule': ['region', 'security_group_id', 'protocol', 'port', 'destination_ip']
+    }
+    
+    if operation not in required_fields:
+        return f"Unknown operation: {operation}"
+    
+    missing_fields = []
+    for field in required_fields[operation]:
+        if field not in collected_data or collected_data[field] is None or collected_data[field] == "":
+            missing_fields.append(field)
+    
+    if not missing_fields:
+        return f"✅ All required data collected for {operation}. Ready to proceed!"
+    else:
+        return f"❌ Missing required fields for {operation}: {', '.join(missing_fields)}. Please collect these before proceeding."
+
+
 @tool
 def get_available_regions() -> str:
     """Get list of available AWS regions"""
@@ -104,6 +194,11 @@ def create_ec2_instance(
     user_data: Optional[str] = None
 ) -> str:
     """Create an EC2 instance with the specified parameters"""
+    # Validate required parameters
+    is_valid, error_msg = validate_ec2_creation_params(region, instance_type, instance_name)
+    if not is_valid:
+        return f"❌ {error_msg}. Please provide all required information before creating the instance."
+    
     try:
         ec2 = get_aws_client("ec2", region)
         
@@ -358,6 +453,401 @@ Current State: {started_instance['CurrentState']['Name']}
         return f"❌ Error starting EC2 instance: {str(e)}"
 
 
+@tool
+def list_security_groups(region: str, vpc_id: Optional[str] = None) -> str:
+    """List security groups in the specified region"""
+    try:
+        ec2 = get_aws_client("ec2", region)
+        
+        filters = []
+        if vpc_id:
+            filters.append({'Name': 'vpc-id', 'Values': [vpc_id]})
+        
+        response = ec2.describe_security_groups(Filters=filters)
+        
+        if not response['SecurityGroups']:
+            return f"No security groups found in {region}" + (f" for VPC {vpc_id}" if vpc_id else "")
+        
+        result = f"📋 Security Groups in {region}:\n"
+        for sg in response['SecurityGroups']:
+            result += f"""
+- Security Group ID: {sg['GroupId']}
+  Name: {sg['GroupName']}
+  Description: {sg['Description']}
+  VPC ID: {sg.get('VpcId', 'default')}
+  Inbound Rules: {len(sg.get('IpPermissions', []))}
+  Outbound Rules: {len(sg.get('IpPermissionsEgress', []))}
+"""
+        
+        return result
+        
+    except Exception as e:
+        return f"❌ Error listing security groups: {str(e)}"
+
+
+@tool
+def create_security_group(
+    region: str,
+    group_name: str,
+    description: str,
+    vpc_id: Optional[str] = None
+) -> str:
+    """Create a new security group"""
+    # Validate required parameters
+    is_valid, error_msg = validate_security_group_creation_params(region, group_name, description)
+    if not is_valid:
+        return f"❌ {error_msg}. Please provide all required information before creating the security group."
+    
+    try:
+        ec2 = get_aws_client("ec2", region)
+        
+        # Create security group
+        response = ec2.create_security_group(
+            GroupName=group_name,
+            Description=description,
+            VpcId=vpc_id
+        )
+        
+        group_id = response['GroupId']
+        
+        return f"""✅ Security group created successfully!
+
+Security Group Details:
+- Group ID: {group_id}
+- Name: {group_name}
+- Description: {description}
+- VPC ID: {vpc_id or 'default'}
+
+You can now add inbound and outbound rules to this security group.
+"""
+        
+    except Exception as e:
+        return f"❌ Error creating security group: {str(e)}"
+
+
+@tool
+def add_inbound_rule(
+    region: str,
+    security_group_id: str,
+    protocol: str,
+    port: int,
+    source_ip: str = "0.0.0.0/0",
+    description: Optional[str] = None
+) -> str:
+    """Add an inbound rule to a security group"""
+    # Validate required parameters
+    is_valid, error_msg = validate_rule_addition_params(region, security_group_id, protocol, port, source_ip)
+    if not is_valid:
+        return f"❌ {error_msg}. Please provide all required information before adding the rule."
+    
+    try:
+        ec2 = get_aws_client("ec2", region)
+        
+        # Prepare the rule
+        rule = {
+            'IpProtocol': protocol,
+            'FromPort': port,
+            'ToPort': port,
+            'IpRanges': [{'CidrIp': source_ip}]
+        }
+        
+        if description:
+            rule['IpRanges'][0]['Description'] = description
+        
+        # Add the rule
+        ec2.authorize_security_group_ingress(
+            GroupId=security_group_id,
+            IpPermissions=[rule]
+        )
+        
+        return f"""✅ Inbound rule added successfully!
+
+Rule Details:
+- Security Group: {security_group_id}
+- Protocol: {protocol}
+- Port: {port}
+- Source IP: {source_ip}
+- Description: {description or 'N/A'}
+
+The rule is now active and will allow traffic from the specified source.
+"""
+        
+    except Exception as e:
+        return f"❌ Error adding inbound rule: {str(e)}"
+
+
+@tool
+def add_outbound_rule(
+    region: str,
+    security_group_id: str,
+    protocol: str,
+    port: int,
+    destination_ip: str = "0.0.0.0/0",
+    description: Optional[str] = None
+) -> str:
+    """Add an outbound rule to a security group"""
+    # Validate required parameters
+    is_valid, error_msg = validate_rule_addition_params(region, security_group_id, protocol, port, destination_ip)
+    if not is_valid:
+        return f"❌ {error_msg}. Please provide all required information before adding the rule."
+    
+    try:
+        ec2 = get_aws_client("ec2", region)
+        
+        # Prepare the rule
+        rule = {
+            'IpProtocol': protocol,
+            'FromPort': port,
+            'ToPort': port,
+            'IpRanges': [{'CidrIp': destination_ip}]
+        }
+        
+        if description:
+            rule['IpRanges'][0]['Description'] = description
+        
+        # Add the rule
+        ec2.authorize_security_group_egress(
+            GroupId=security_group_id,
+            IpPermissions=[rule]
+        )
+        
+        return f"""✅ Outbound rule added successfully!
+
+Rule Details:
+- Security Group: {security_group_id}
+- Protocol: {protocol}
+- Port: {port}
+- Destination IP: {destination_ip}
+- Description: {description or 'N/A'}
+
+The rule is now active and will allow traffic to the specified destination.
+"""
+        
+    except Exception as e:
+        return f"❌ Error adding outbound rule: {str(e)}"
+
+
+@tool
+def remove_inbound_rule(
+    region: str,
+    security_group_id: str,
+    protocol: str,
+    port: int,
+    source_ip: str = "0.0.0.0/0"
+) -> str:
+    """Remove an inbound rule from a security group"""
+    try:
+        ec2 = get_aws_client("ec2", region)
+        
+        # Prepare the rule to remove
+        rule = {
+            'IpProtocol': protocol,
+            'FromPort': port,
+            'ToPort': port,
+            'IpRanges': [{'CidrIp': source_ip}]
+        }
+        
+        # Remove the rule
+        ec2.revoke_security_group_ingress(
+            GroupId=security_group_id,
+            IpPermissions=[rule]
+        )
+        
+        return f"""✅ Inbound rule removed successfully!
+
+Removed Rule:
+- Security Group: {security_group_id}
+- Protocol: {protocol}
+- Port: {port}
+- Source IP: {source_ip}
+
+The rule has been removed and traffic from this source will no longer be allowed.
+"""
+        
+    except Exception as e:
+        return f"❌ Error removing inbound rule: {str(e)}"
+
+
+@tool
+def remove_outbound_rule(
+    region: str,
+    security_group_id: str,
+    protocol: str,
+    port: int,
+    destination_ip: str = "0.0.0.0/0"
+) -> str:
+    """Remove an outbound rule from a security group"""
+    try:
+        ec2 = get_aws_client("ec2", region)
+        
+        # Prepare the rule to remove
+        rule = {
+            'IpProtocol': protocol,
+            'FromPort': port,
+            'ToPort': port,
+            'IpRanges': [{'CidrIp': destination_ip}]
+        }
+        
+        # Remove the rule
+        ec2.revoke_security_group_egress(
+            GroupId=security_group_id,
+            IpPermissions=[rule]
+        )
+        
+        return f"""✅ Outbound rule removed successfully!
+
+Removed Rule:
+- Security Group: {security_group_id}
+- Protocol: {protocol}
+- Port: {port}
+- Destination IP: {destination_ip}
+
+The rule has been removed and traffic to this destination will no longer be allowed.
+"""
+        
+    except Exception as e:
+        return f"❌ Error removing outbound rule: {str(e)}"
+
+
+@tool
+def get_security_group_details(region: str, security_group_id: str) -> str:
+    """Get detailed information about a specific security group"""
+    try:
+        ec2 = get_aws_client("ec2", region)
+        
+        response = ec2.describe_security_groups(GroupIds=[security_group_id])
+        sg = response['SecurityGroups'][0]
+        
+        result = f"""📋 Security Group Details:
+
+Basic Information:
+- Group ID: {sg['GroupId']}
+- Name: {sg['GroupName']}
+- Description: {sg['Description']}
+- VPC ID: {sg.get('VpcId', 'default')}
+- Owner ID: {sg['OwnerId']}
+
+Inbound Rules ({len(sg.get('IpPermissions', []))}):"""
+        
+        for rule in sg.get('IpPermissions', []):
+            protocol = rule.get('IpProtocol', 'all')
+            from_port = rule.get('FromPort', 'N/A')
+            to_port = rule.get('ToPort', 'N/A')
+            
+            result += f"\n  - Protocol: {protocol}, Ports: {from_port}-{to_port}"
+            
+            for ip_range in rule.get('IpRanges', []):
+                cidr = ip_range.get('CidrIp', 'N/A')
+                desc = ip_range.get('Description', '')
+                result += f"\n    Source: {cidr} {desc}"
+        
+        result += f"\n\nOutbound Rules ({len(sg.get('IpPermissionsEgress', []))}):"
+        
+        for rule in sg.get('IpPermissionsEgress', []):
+            protocol = rule.get('IpProtocol', 'all')
+            from_port = rule.get('FromPort', 'N/A')
+            to_port = rule.get('ToPort', 'N/A')
+            
+            result += f"\n  - Protocol: {protocol}, Ports: {from_port}-{to_port}"
+            
+            for ip_range in rule.get('IpRanges', []):
+                cidr = ip_range.get('CidrIp', 'N/A')
+                desc = ip_range.get('Description', '')
+                result += f"\n    Destination: {cidr} {desc}"
+        
+        return result
+        
+    except Exception as e:
+        return f"❌ Error getting security group details: {str(e)}"
+
+
+@tool
+def delete_security_group(region: str, security_group_id: str) -> str:
+    """Delete a security group (only if not in use)"""
+    try:
+        ec2 = get_aws_client("ec2", region)
+        
+        # Delete the security group
+        ec2.delete_security_group(GroupId=security_group_id)
+        
+        return f"""✅ Security group deleted successfully!
+
+Security Group ID: {security_group_id}
+
+Note: Security groups can only be deleted if they are not associated with any instances or other resources.
+"""
+        
+    except Exception as e:
+        return f"❌ Error deleting security group: {str(e)}"
+
+
+@tool
+def create_web_server_security_group(region: str, vpc_id: Optional[str] = None) -> str:
+    """Create a pre-configured security group for web servers with common rules"""
+    try:
+        ec2 = get_aws_client("ec2", region)
+        
+        # Create security group
+        group_name = f"web-server-sg-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        response = ec2.create_security_group(
+            GroupName=group_name,
+            Description="Security group for web servers with HTTP/HTTPS access",
+            VpcId=vpc_id
+        )
+        
+        group_id = response['GroupId']
+        
+        # Add common web server rules
+        rules = [
+            # SSH access
+            {
+                'IpProtocol': 'tcp',
+                'FromPort': 22,
+                'ToPort': 22,
+                'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'SSH access'}]
+            },
+            # HTTP access
+            {
+                'IpProtocol': 'tcp',
+                'FromPort': 80,
+                'ToPort': 80,
+                'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'HTTP access'}]
+            },
+            # HTTPS access
+            {
+                'IpProtocol': 'tcp',
+                'FromPort': 443,
+                'ToPort': 443,
+                'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'HTTPS access'}]
+            }
+        ]
+        
+        # Add inbound rules
+        ec2.authorize_security_group_ingress(
+            GroupId=group_id,
+            IpPermissions=rules
+        )
+        
+        return f"""✅ Web server security group created successfully!
+
+Security Group Details:
+- Group ID: {group_id}
+- Name: {group_name}
+- Description: Security group for web servers with HTTP/HTTPS access
+- VPC ID: {vpc_id or 'default'}
+
+Pre-configured Rules:
+- SSH (22): 0.0.0.0/0
+- HTTP (80): 0.0.0.0/0
+- HTTPS (443): 0.0.0.0/0
+
+This security group is ready to use with web servers!
+"""
+        
+    except Exception as e:
+        return f"❌ Error creating web server security group: {str(e)}"
+
+
 # Create the interactive Strands agent
 interactive_agent = Agent(
     model=OpenAIModel(
@@ -371,6 +861,7 @@ interactive_agent = Agent(
         }
     ),
     tools=[
+        get_data_collection_status,
         get_available_regions,
         get_instance_type_info,
         get_latest_amazon_linux_ami,
@@ -378,48 +869,112 @@ interactive_agent = Agent(
         list_ec2_instances,
         terminate_ec2_instance,
         stop_ec2_instance,
-        start_ec2_instance
+        start_ec2_instance,
+        list_security_groups,
+        create_security_group,
+        add_inbound_rule,
+        add_outbound_rule,
+        remove_inbound_rule,
+        remove_outbound_rule,
+        get_security_group_details,
+        delete_security_group,
+        create_web_server_security_group
     ],
-    system_prompt="""You are an interactive Infrastructure-as-Code assistant specialized in AWS EC2 instance creation. 
-You help users create EC2 instances through a conversational interface.
+    system_prompt="""You are an interactive Infrastructure-as-Code assistant specialized in AWS EC2 instance and security group management. 
+You help users create and manage EC2 instances and security groups through a conversational interface.
 
-Your role:
-1. **Gather Requirements**: Ask users about their EC2 instance needs step by step
-2. **Provide Guidance**: Help users understand AWS concepts, regions, instance types, and best practices
-3. **Create Instances**: Use the available tools to create EC2 instances with the gathered information
-4. **Manage Instances**: Help users list, stop, start, and terminate existing instances
+**CRITICAL: DATA COLLECTION PROTOCOL**
+You MUST collect ALL required information before calling any tools. Do NOT call tools with incomplete data.
 
-Key information to gather for creation:
-- **Region**: Where should the instance be deployed?
-- **Instance Type**: What type of instance (t2.micro, t3.small, etc.)?
-- **Instance Name**: What should the instance be named?
-- **Key Pair**: SSH key for access (optional but recommended)
-- **Security Groups**: Network security settings
-- **Additional Config**: Subnet, user data, etc.
+**Step-by-Step Process:**
+1. **Identify User Intent**: Determine what the user wants to do (create instance, manage security group, etc.)
+2. **Collect ALL Required Data**: Ask for every piece of information needed for the operation
+3. **Validate Information**: Confirm all collected data is correct and complete
+4. **Execute Tool**: Only call the tool when you have ALL required parameters
+5. **Report Results**: Provide clear feedback on the operation outcome
 
-Available operations:
-- **Create**: Launch new EC2 instances
+**Required Information for Each Operation:**
+
+**EC2 Instance Creation - REQUIRED:**
+- Region (MUST specify)
+- Instance Type (MUST specify)
+- Instance Name (MUST specify)
+- Key Pair (optional but recommended)
+- Security Group IDs (optional - can create new ones)
+- Subnet ID (optional)
+- User Data (optional)
+
+**Security Group Creation - REQUIRED:**
+- Region (MUST specify)
+- Group Name (MUST specify)
+- Description (MUST specify)
+- VPC ID (optional)
+
+**Adding Security Group Rules - REQUIRED:**
+- Region (MUST specify)
+- Security Group ID (MUST specify)
+- Protocol (MUST specify: tcp, udp, icmp, etc.)
+- Port (MUST specify)
+- Source/Destination IP (MUST specify)
+- Description (optional but recommended)
+
+**Data Collection Rules:**
+- Ask ONE question at a time
+- Wait for user response before asking the next question
+- Do NOT assume any values - always ask the user
+- If user provides incomplete information, ask for the missing pieces
+- Confirm all collected information before proceeding
+- Use tools like get_available_regions() to help users make informed choices
+- Use get_data_collection_status() to check what information is still needed
+
+**Example Conversation Flow:**
+1. "I'd like to help you create an EC2 instance. First, which AWS region would you like to use?"
+2. [Wait for region response]
+3. "Great! What instance type would you like? (e.g., t2.micro, t3.small)"
+4. [Wait for instance type response]
+5. "What would you like to name this instance?"
+6. [Wait for name response]
+7. "Do you have a key pair for SSH access? If so, what's the name?"
+8. [Wait for key pair response]
+9. "Would you like to use an existing security group or create a new one?"
+10. [Wait for security group response]
+11. "Perfect! Let me create your EC2 instance with these settings: [summarize all collected data]"
+12. [Now call the tool with complete information]
+
+**Available Operations:**
+**EC2 Instances:**
+- **Create**: Launch new EC2 instances (collect ALL required data first)
 - **List**: Show existing instances with details
 - **Stop**: Stop running instances (can be restarted)
 - **Start**: Start stopped instances
 - **Terminate**: Permanently delete instances (irreversible)
 
-Conversation style:
+**Security Groups:**
+- **List**: Show existing security groups with details
+- **Create**: Create new security groups (collect ALL required data first)
+- **Add Rules**: Add inbound or outbound rules (collect ALL required data first)
+- **Remove Rules**: Remove specific rules from security groups
+- **View Details**: Get detailed information about a security group
+- **Delete**: Delete security groups (only if not in use)
+- **Quick Setup**: Create pre-configured security groups (e.g., web server)
+
+**Conversation Style:**
 - Be friendly and helpful
-- Ask one question at a time
+- Ask one question at a time and wait for responses
 - Provide explanations and recommendations
-- Use the tools to get real-time AWS information
-- Confirm details before creating/modifying instances
+- Use tools to get real-time AWS information when helpful
 - Always explain what you're doing and why
 - Warn users about irreversible actions like termination
+- Suggest best practices for security group configurations
 
-When managing instances:
-- Always show instance names and current state
-- Explain the difference between stop and terminate
-- Provide clear feedback on all operations
-- Include relevant instance details in responses
+**Security Group Best Practices:**
+- Use specific IP ranges instead of 0.0.0.0/0 when possible
+- Add descriptive comments to rules
+- Follow the principle of least privilege
+- Regularly review and clean up unused rules
+- Use separate security groups for different purposes
 
-Remember: Always confirm the configuration before creating any instances and warn about irreversible actions!"""
+**REMEMBER: NEVER call tools with incomplete data. Always collect ALL required information first!**"""
 )
 
 
