@@ -1,168 +1,246 @@
-# EC2 Instance Creation Examples
+# SSH Key Creation and Download Examples
 
-This directory contains examples demonstrating how to create and manage EC2 instances using boto3.
+This directory contains comprehensive examples for creating and downloading SSH keys using the AWS Infrastructure Management Agent.
 
-## Files
+## Examples Overview
 
-- `create_ec2_instance.py` - Comprehensive example showing EC2 instance creation with various configurations
+### 1. `ssh_key_example.py` - Complete SSH Key Workflow
+**Purpose**: Demonstrates the complete workflow of SSH key creation and download using the agent directly.
+
+**Features**:
+- Creates SSH keys via the agent
+- Extracts key information from agent responses
+- Simulates webapp download process
+- Saves keys to files with proper permissions
+- Works with or without AWS credentials (simulation mode)
+
+**Usage**:
+```bash
+# With AWS credentials
+python3 ssh_key_example.py
+
+# Without AWS credentials (simulation)
+python3 ssh_key_example.py
+```
+
+### 2. `webapp_ssh_example.py` - Webapp Integration Example
+**Purpose**: Demonstrates how to interact with the webapp for SSH key creation and download.
+
+**Features**:
+- Connects to the running webapp
+- Sends chat messages via WebSocket
+- Receives download information
+- Downloads SSH keys via HTTP API
+- Saves keys with proper permissions
+
+**Usage**:
+```bash
+# Start webapp first
+python3 main.py
+
+# In another terminal, run the example
+python3 webapp_ssh_example.py
+```
 
 ## Prerequisites
 
-1. **AWS Credentials**: Ensure your AWS credentials are configured. You can:
-   - Use AWS CLI: `aws configure`
-   - Set environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
-   - Use IAM roles (if running on EC2)
+### AWS Credentials Setup
+Before running the examples with real AWS resources, set up your credentials:
 
-2. **Required Permissions**: Your AWS user/role needs the following permissions:
-   ```json
-   {
-       "Version": "2012-10-17",
-       "Statement": [
-           {
-               "Effect": "Allow",
-               "Action": [
-                   "ec2:RunInstances",
-                   "ec2:DescribeInstances",
-                   "ec2:TerminateInstances",
-                   "ec2:CreateTags",
-                   "ec2:DescribeImages",
-                   "ec2:DescribeSecurityGroups",
-                   "ec2:DescribeSubnets",
-                   "ec2:DescribeVpcs"
-               ],
-               "Resource": "*"
-           }
-       ]
-   }
-   ```
-
-## Usage
-
-### Basic Example
-
-```python
-from example.create_ec2_instance import EC2InstanceManager
-
-# Initialize manager
-ec2_manager = EC2InstanceManager(region_name='us-east-1')
-
-# Create a basic instance
-result = ec2_manager.create_instance(
-    image_id='ami-0c02fb55956c7d316',  # Amazon Linux 2
-    instance_type='t2.micro',
-    tags={
-        'Name': 'My-Instance',
-        'Environment': 'Development'
-    }
-)
-
-if result['success']:
-    print(f"Instance created: {result['instance_id']}")
-    print(f"Public IP: {result['instance_details']['public_ip']}")
-else:
-    print(f"Error: {result['error']}")
+**Option 1: Environment Variables**
+```bash
+export AWS_ACCESS_KEY_ID="your-access-key"
+export AWS_SECRET_ACCESS_KEY="your-secret-key"
+export AWS_SESSION_TOKEN="your-session-token"  # Optional
 ```
 
-### Advanced Example with User Data
-
-```python
-# User data script to install Apache
-user_data = """#!/bin/bash
-yum update -y
-yum install -y httpd
-systemctl start httpd
-systemctl enable httpd
-echo "<h1>Hello from EC2!</h1>" > /var/www/html/index.html
-"""
-
-result = ec2_manager.create_instance(
-    image_id='ami-0c02fb55956c7d316',
-    instance_type='t2.micro',
-    user_data=user_data,
-    tags={'Name': 'Web-Server', 'Purpose': 'Web-Server'}
-)
+**Option 2: AWS CLI Configuration**
+```bash
+aws configure
 ```
 
-### VPC Example
+**Option 3: IAM Role (if running on EC2)**
+Ensure your EC2 instance has an IAM role with EC2 permissions.
 
+### Required Permissions
+Your AWS credentials need the following permissions:
+- `ec2:CreateKeyPair`
+- `ec2:DescribeKeyPairs`
+- `ec2:DeleteKeyPair`
+
+## Example Workflows
+
+### Workflow 1: Direct Agent Usage
 ```python
-# Create instance in specific subnet
-result = ec2_manager.create_instance(
-    image_id='ami-0c02fb55956c7d316',
-    instance_type='t2.micro',
-    subnet_id='subnet-12345678',  # Your subnet ID
-    security_group_ids=['sg-12345678'],  # Your security group ID
-    tags={'Name': 'VPC-Instance', 'Network': 'Private'}
-)
+from ssh_key_example import SSHKeyExample
+
+# Create example instance
+example = SSHKeyExample()
+
+# Run complete example
+success = example.run_complete_example("my-key", "us-east-1")
+
+if success:
+    print("SSH key created and saved successfully!")
 ```
 
-## Running the Examples
+### Workflow 2: Webapp Integration
+```python
+from webapp_ssh_example import WebappSSHExample
 
-1. **Direct execution**:
-   ```bash
-   cd app/example
-   python3 create_ec2_instance.py
-   ```
+# Create webapp example instance
+example = WebappSSHExample("http://0.0.0.0:5001")
 
-2. **Import and use**:
-   ```python
-   from example.create_ec2_instance import EC2InstanceManager, main
-   
-   # Run the example
-   main()
-   
-   # Or use the class directly
-   ec2_manager = EC2InstanceManager()
-   # ... your code here
-   ```
+# Run complete example
+success = example.run_complete_example("webapp-key", "us-east-1")
 
-## Features Demonstrated
+if success:
+    print("SSH key created via webapp and downloaded!")
+```
 
-- ✅ Basic EC2 instance creation
-- ✅ Instance configuration (type, AMI, etc.)
-- ✅ Tagging instances
-- ✅ User data scripts
-- ✅ VPC and subnet configuration
-- ✅ Security group assignment
-- ✅ Error handling
-- ✅ Instance details retrieval
-- ✅ Instance listing
-- ✅ Instance termination
+## Expected Output
 
-## Important Notes
+### Successful SSH Key Creation
+```
+🚀 SSH Key Creation and Download Example
+============================================================
+🔑 Creating SSH key 'example-key' in region 'us-east-1'...
 
-1. **Cost**: EC2 instances incur charges. Always terminate instances when done testing.
+📝 Agent Response:
+--------------------------------------------------
+✅ Key pair created successfully!
 
-2. **AMI IDs**: AMI IDs are region-specific. The example uses `ami-0c02fb55956c7d316` (Amazon Linux 2) for `us-east-1`. Update for your region.
+Key Pair Details:
+- Key Name: example-key
+- Key Pair ID: key-123456
+- Region: us-east-1
 
-3. **Security Groups**: Ensure your security groups allow necessary traffic (SSH, HTTP, etc.).
+🔑 PRIVATE KEY (Save this securely - it won't be shown again):
+```
+-----BEGIN RSA PRIVATE KEY-----
+[Private key content]
+-----END RSA PRIVATE KEY-----
+```
+--------------------------------------------------
 
-4. **Key Pairs**: For SSH access, you'll need a key pair. Create one in the AWS Console or via CLI.
+🔍 Detection Results:
+✅ Contains 'PRIVATE KEY': True
+✅ Contains '-----BEGIN RSA PRIVATE KEY-----': True
+✅ Contains 'key pair' and 'created successfully': True
+✅ SSH key creation detected successfully!
 
-5. **Free Tier**: `t2.micro` instances are eligible for AWS Free Tier (750 hours/month for 12 months).
+📋 Extracted Key Information:
+Key Name: example-key
+Region: us-east-1
+Has Private Key: True
+
+📥 Simulating Webapp Download Process:
+Key Name: example-key
+Region: us-east-1
+Private Key Length: 901 characters
+
+🔧 Webapp Process:
+1. ✅ Key detected in agent response
+2. ✅ Key information extracted
+3. ✅ Key stored temporarily with ID: example_key_1234567890
+4. ✅ Download button would appear in chat
+5. ✅ User clicks download button
+6. ✅ Key downloaded as example-key.pem
+7. ✅ Key removed from temporary storage
+
+💾 SSH Key Saved:
+Filename: example-key.pem
+Permissions: 400 (read-only for owner)
+Size: 901 characters
+
+🔑 SSH Usage:
+ssh -i example-key.pem ec2-user@<instance-public-ip>
+
+🎉 SUCCESS! Complete example completed successfully!
+✅ SSH key created via agent
+✅ Key information extracted
+✅ Download process simulated
+✅ Key saved to file with proper permissions
+```
+
+## Security Features
+
+### Key Security
+- **Temporary Storage**: Keys are stored temporarily with 1-hour expiration
+- **Automatic Cleanup**: Keys are removed after download
+- **Proper Permissions**: Files are saved with chmod 400 (read-only for owner)
+- **No Permanent Storage**: Keys are never stored permanently on the server
+
+### Best Practices
+- **Secure Storage**: Save keys to `~/.ssh/` directory
+- **Proper Permissions**: Always use `chmod 400` for private keys
+- **Never Share**: Private keys should never be shared publicly
+- **Regular Rotation**: Rotate keys regularly for security
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Permission Denied**: Check your AWS credentials and IAM permissions
-2. **AMI Not Found**: Verify the AMI ID exists in your region
-3. **Subnet Not Found**: Ensure the subnet ID is correct and in the same region
-4. **Security Group Not Found**: Verify the security group ID and region
+**1. AWS Credentials Not Found**
+```
+❌ Error creating key pair: AWS credentials not found in environment variables.
+```
+**Solution**: Set up AWS credentials using one of the methods above.
+
+**2. Webapp Not Running**
+```
+❌ Cannot connect to webapp: [Errno 61] Connection refused
+```
+**Solution**: Start the webapp with `python3 main.py`.
+
+**3. Permission Denied**
+```
+❌ Error saving key: [Errno 13] Permission denied
+```
+**Solution**: Ensure you have write permissions in the current directory.
+
+**4. Key Not Detected**
+```
+❌ SSH key creation not detected properly
+```
+**Solution**: Check that the agent is returning the complete tool response.
 
 ### Debug Mode
-
-Enable debug logging to see detailed boto3 requests:
-
-```python
-import boto3
-import logging
-
-# Enable debug logging
-logging.basicConfig(level=logging.DEBUG)
-boto3.set_stream_logger('', logging.DEBUG)
+To enable debug output, set the environment variable:
+```bash
+export DEBUG=1
+python3 ssh_key_example.py
 ```
 
-## Integration with IaC Agent
+## Integration with Webapp
 
-This example can be integrated with the IaC agent in `app/iac/interactive_strands_agent.py` to provide programmatic EC2 management capabilities through the chatbot interface.
+### Webapp Features
+- **Real-time Chat**: Interactive chat interface for key creation
+- **Download Buttons**: One-click download buttons in chat
+- **Progress Tracking**: Real-time status updates
+- **Error Handling**: Comprehensive error messages
+
+### API Endpoints
+- `GET /api/download-key/{key_id}` - Download SSH key
+- `GET /api/key-info/{key_id}` - Get key information
+- `WebSocket /ws/{user_id}` - Real-time chat communication
+
+## Next Steps
+
+1. **Test the Examples**: Run both examples to understand the workflow
+2. **Set Up AWS**: Configure AWS credentials for real key creation
+3. **Start Webapp**: Launch the webapp for interactive testing
+4. **Create Keys**: Use the chat interface to create SSH keys
+5. **Download Keys**: Use the download buttons to get your keys
+6. **Use Keys**: Connect to EC2 instances using your SSH keys
+
+## Support
+
+If you encounter issues:
+1. Check AWS credentials setup
+2. Verify webapp is running
+3. Review error messages for specific issues
+4. Test with simulation mode first
+5. Check file permissions and directory access
+
+The examples are designed to be self-contained and provide comprehensive coverage of the SSH key creation and download functionality.

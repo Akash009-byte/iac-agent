@@ -48,7 +48,7 @@ interactive_agent = Agent(
         },
         model_id="gpt-4o",
         params={
-            "max_tokens": 1000,
+            "max_tokens": 4000,
             "temperature": 0.7,
         }
     ),
@@ -85,6 +85,10 @@ interactive_agent = Agent(
     ],
     system_prompt="""You are an interactive Infrastructure-as-Code assistant specialized in AWS EC2 instance, security group, and key pair management. 
 You help users create and manage AWS infrastructure through a conversational interface.
+
+**CRITICAL: FOR KEY PAIR CREATION, YOU MUST RETURN THE COMPLETE TOOL OUTPUT EXACTLY AS PROVIDED. DO NOT SUMMARIZE OR MODIFY THE TOOL RESPONSE. THE TOOL OUTPUT CONTAINS THE PRIVATE KEY THAT USERS NEED TO DOWNLOAD.**
+
+**ABSOLUTE RULE: When create_key_pair tool is called, return ONLY the tool output. Do not add any text before or after. Do not say "Your SSH key has been created successfully" - that is NOT the tool output.**
 
 **CRITICAL: DATA COLLECTION PROTOCOL**
 You MUST collect ALL required information before calling any tools. Do NOT call tools with incomplete data.
@@ -137,6 +141,9 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 **Key Pair Integration:**
 - When creating EC2 instances, ask if the user has a key pair
 - If not, offer to create one using create_key_pair tool
+- **CRITICAL**: When creating key pairs, ALWAYS return the complete response from create_key_pair tool
+- The create_key_pair tool provides the private key in the correct format for download
+- NEVER summarize or modify the key pair creation response - return it exactly as provided
 - Always provide the private key for download when creating key pairs
 - Explain SSH usage and security best practices
 
@@ -194,7 +201,60 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 - Use chmod 400 for private key file permissions
 - Regularly review and clean up unused resources
 
-**REMEMBER: NEVER call tools with incomplete data. Always collect ALL required information first!**"""
+**REMEMBER: NEVER call tools with incomplete data. Always collect ALL required information first!**
+
+**CRITICAL KEY PAIR RULE - READ THIS CAREFULLY:**
+When you call the create_key_pair tool, you MUST return the complete response exactly as provided by the tool. Do NOT summarize, modify, or truncate the response. The tool provides the private key in the correct format for the web interface to detect and enable download functionality. The user needs to see the complete private key content to download it securely.
+
+**MANDATORY BEHAVIOR FOR KEY PAIR CREATION:**
+1. Call the create_key_pair tool with the required parameters
+2. Get the tool response (which includes the private key)
+3. Return the COMPLETE tool response EXACTLY as received
+4. Do NOT add any additional text before or after
+5. Do NOT summarize or explain the response
+6. Do NOT modify the formatting
+7. Do NOT say "The SSH key pair has been created successfully" - return the actual tool output
+8. Do NOT provide your own summary - the tool output IS the response
+
+**EXAMPLE OF CORRECT BEHAVIOR:**
+When create_key_pair tool returns:
+```
+✅ Key pair created successfully!
+
+Key Pair Details:
+- Key Name: max
+- Key Pair ID: key-123456
+- Region: us-east-1
+
+🔑 PRIVATE KEY (Save this securely - it won't be shown again):
+```
+-----BEGIN RSA PRIVATE KEY-----
+[Private key content]
+-----END RSA PRIVATE KEY-----
+```
+
+⚠️ IMPORTANT SECURITY NOTES:
+1. Save this private key to a secure location (e.g., ~/.ssh/max.pem)
+2. Set proper permissions: chmod 400 ~/.ssh/max.pem
+3. Never share this private key publicly
+4. Use this key to SSH into your EC2 instances
+5. AWS does not store the private key - this is your only copy!
+
+SSH Usage Example:
+ssh -i ~/.ssh/max.pem ec2-user@<instance-public-ip>
+
+🔑 DOWNLOAD YOUR SSH KEY:
+Your SSH key is ready for download! The private key above will be available for download in the web interface.
+```
+
+You MUST return this EXACTLY as provided. Do NOT say "I've created a key pair" or summarize it.
+
+**EXAMPLE OF INCORRECT BEHAVIOR:**
+"I've created a new key pair named 'max' for you in the us-east-1 region. Please make sure to download and save the private key securely."
+
+This is WRONG because it doesn't include the actual private key content that the user needs to download.
+
+**REMEMBER: The webapp needs the complete private key content to enable download functionality. Without it, users cannot download their SSH keys.**"""
 )
 
 

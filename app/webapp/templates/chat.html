@@ -261,6 +261,45 @@
             display: flex;
         }
 
+        .download-button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .download-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .download-info {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .download-info h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+
+        .download-info p {
+            margin: 5px 0;
+            color: #6c757d;
+        }
+
         @media (max-width: 768px) {
             .chat-container {
                 width: 95%;
@@ -355,7 +394,15 @@
         function handleMessage(data) {
             if (data.type === 'message') {
                 hideTypingIndicator();
-                addMessage(data.role, data.content, data.timestamp);
+                
+                // Debug logging for download info
+                if (data.download_info) {
+                    console.log('🔍 Download info received:', data.download_info);
+                } else {
+                    console.log('❌ No download info in message');
+                }
+                
+                addMessage(data.role, data.content, data.timestamp, data.download_info);
             } else if (data.type === 'typing') {
                 showTypingIndicator();
             } else if (data.type === 'pong') {
@@ -364,7 +411,7 @@
         }
 
         // Add message to chat
-        function addMessage(role, content, timestamp) {
+        function addMessage(role, content, timestamp, downloadInfo = null) {
             const messagesContainer = document.getElementById('chatMessages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
@@ -375,7 +422,38 @@
             
             const messageContent = document.createElement('div');
             messageContent.className = 'message-content';
-            messageContent.textContent = content;
+            
+            // Handle markdown-like formatting for better display
+            const formattedContent = content
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/\n/g, '<br>');
+            
+            messageContent.innerHTML = formattedContent;
+            
+            // Add download section if download info is available
+            if (downloadInfo && role === 'assistant') {
+                console.log('🔍 Adding download section with info:', downloadInfo);
+                
+                const downloadSection = document.createElement('div');
+                downloadSection.className = 'download-info';
+                
+                downloadSection.innerHTML = `
+                    <h4>🔑 SSH Key Ready for Download</h4>
+                    <p><strong>Key Name:</strong> ${downloadInfo.key_name}</p>
+                    <p><strong>File:</strong> ${downloadInfo.file_name}</p>
+                    <p><strong>Instructions:</strong> ${downloadInfo.instructions}</p>
+                    <button class="download-button" onclick="downloadSSHKey('${downloadInfo.key_name}', '${downloadInfo.file_name}')">
+                        📥 Download SSH Key
+                    </button>
+                `;
+                
+                messageContent.appendChild(downloadSection);
+                console.log('✅ Download section added to message');
+            } else {
+                console.log('❌ No download section added. downloadInfo:', downloadInfo, 'role:', role);
+            }
             
             const timestampDiv = document.createElement('div');
             timestampDiv.className = 'message-timestamp';
@@ -443,6 +521,48 @@
         function sendQuickMessage(message) {
             document.getElementById('messageInput').value = message;
             sendMessage(message);
+        }
+
+        // Download SSH key
+        function downloadSSHKey(keyName, fileName) {
+            try {
+                // Create download link
+                const downloadUrl = `/api/download-file/${fileName}`;
+                
+                // Create temporary link element
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = fileName;
+                link.style.display = 'none';
+                
+                // Add to DOM, click, and remove
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Show success message
+                const successMessage = document.createElement('div');
+                successMessage.className = 'message assistant';
+                successMessage.innerHTML = `
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content">
+                        ✅ SSH key "${keyName}" downloaded successfully!<br><br>
+                        <strong>Next steps:</strong><br>
+                        1. Save the file to ~/.ssh/${fileName}<br>
+                        2. Set permissions: chmod 400 ~/.ssh/${fileName}<br>
+                        3. Use to SSH: ssh -i ~/.ssh/${fileName} ec2-user@&lt;instance-ip&gt;<br><br>
+                        <em>⚠️ Keep this key secure and never share it!</em>
+                        <div class="message-timestamp">${new Date().toLocaleTimeString()}</div>
+                    </div>
+                `;
+                
+                document.getElementById('chatMessages').appendChild(successMessage);
+                scrollToBottom();
+                
+            } catch (error) {
+                console.error('Download error:', error);
+                alert('Failed to download SSH key. Please try again.');
+            }
         }
 
         // Scroll to bottom

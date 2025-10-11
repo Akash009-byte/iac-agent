@@ -38,7 +38,9 @@ def create_key_pair(region: str, key_name: str) -> str:
         return f"❌ {error_msg}. Please provide all required information before creating the key pair."
     
     try:
-        ec2 = get_aws_client("ec2", region)
+        # Use boto3 directly (same as working example)
+        import boto3
+        ec2 = boto3.client('ec2', region_name=region)
         
         # Create the key pair
         response = ec2.create_key_pair(KeyName=key_name)
@@ -68,6 +70,9 @@ Key Pair Details:
 
 SSH Usage Example:
 ssh -i ~/.ssh/{key_name}.pem ec2-user@<instance-public-ip>
+
+🔑 DOWNLOAD YOUR SSH KEY:
+Your SSH key is ready for download! The private key above will be available for download in the web interface.
 """
         
     except Exception as e:
@@ -78,7 +83,9 @@ ssh -i ~/.ssh/{key_name}.pem ec2-user@<instance-public-ip>
 def list_key_pairs(region: str) -> str:
     """List all key pairs in the specified region"""
     try:
-        ec2 = get_aws_client("ec2", region)
+        # Use boto3 directly (same as working example)
+        import boto3
+        ec2 = boto3.client('ec2', region_name=region)
         
         response = ec2.describe_key_pairs()
         
@@ -104,7 +111,9 @@ def list_key_pairs(region: str) -> str:
 def delete_key_pair(region: str, key_name: str) -> str:
     """Delete a key pair"""
     try:
-        ec2 = get_aws_client("ec2", region)
+        # Use boto3 directly (same as working example)
+        import boto3
+        ec2 = boto3.client('ec2', region_name=region)
         
         # Delete the key pair
         ec2.delete_key_pair(KeyName=key_name)
@@ -126,7 +135,9 @@ you should also delete it from your local system for security.
 def get_key_pair_details(region: str, key_name: str) -> str:
     """Get detailed information about a specific key pair"""
     try:
-        ec2 = get_aws_client("ec2", region)
+        # Use boto3 directly (same as working example)
+        import boto3
+        ec2 = boto3.client('ec2', region_name=region)
         
         response = ec2.describe_key_pairs(KeyNames=[key_name])
         key_pair = response['KeyPairs'][0]

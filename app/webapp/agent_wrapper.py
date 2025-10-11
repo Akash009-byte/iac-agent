@@ -28,23 +28,108 @@ def interactive_agent(message: str) -> str:
         # Extract text content from AgentResult
         response_text = None
         
-        # Method 1: Check if result has messages
-        if hasattr(result, 'messages') and result.messages:
-            # Get the last assistant message
-            for message_obj in reversed(result.messages):
-                if hasattr(message_obj, 'role') and message_obj.role == 'assistant':
-                    if hasattr(message_obj, 'content'):
-                        if isinstance(message_obj.content, list):
-                            # Content is a list of content blocks
-                            for content_block in message_obj.content:
-                                if hasattr(content_block, 'text'):
-                                    response_text = content_block.text
-                                    break
-                        else:
-                            response_text = str(message_obj.content)
-                    elif hasattr(message_obj, 'text'):
-                        response_text = message_obj.text
-                    break
+        # Method 1: Check traces for tool outputs (for key pair creation)
+        if hasattr(result, 'metrics') and hasattr(result.metrics, 'traces'):
+            tool_outputs = []
+            for trace in result.metrics.traces:
+                if hasattr(trace, 'children'):
+                    for child in trace.children:
+                        if hasattr(child, 'name') and 'Tool:' in child.name:
+                            if hasattr(child, 'message') and child.message:
+                                message = child.message
+                                if isinstance(message, dict) and 'content' in message:
+                                    content = message['content']
+                                    if isinstance(content, list):
+                                        for content_block in content:
+                                            if isinstance(content_block, dict) and 'toolResult' in content_block:
+                                                tool_result = content_block['toolResult']
+                                                if 'content' in tool_result:
+                                                    tool_content = tool_result['content']
+                                                    if isinstance(tool_content, list):
+                                                        for tool_block in tool_content:
+                                                            if isinstance(tool_block, dict) and 'text' in tool_block:
+                                                                tool_outputs.append(tool_block['text'])
+            
+            if tool_outputs:
+                # Use tool outputs as the primary response
+                response_text = '\n\n'.join(tool_outputs)
+                
+                # Check if this is a key pair creation response and clean it up
+                if "-----BEGIN RSA PRIVATE KEY-----" in response_text and "created successfully" in response_text.lower():
+                    # Extract key information without showing the private key
+                    import re
+                    
+                    key_name_match = re.search(r'Key Name:\s*([^\n]+)', response_text)
+                    key_pair_id_match = re.search(r'Key Pair ID:\s*([^\n]+)', response_text)
+                    region_match = re.search(r'Region:\s*([^\n]+)', response_text)
+                    
+                    key_name = key_name_match.group(1).strip() if key_name_match else "ssh-key"
+                    key_pair_id = key_pair_id_match.group(1).strip() if key_pair_id_match else "unknown"
+                    region = region_match.group(1).strip() if region_match else "us-east-1"
+                    
+                    # Create clean response without private key
+                    response_text = f"""✅ Key pair created successfully!
+
+Key Pair Details:
+- Key Name: {key_name}
+- Key Pair ID: {key_pair_id}
+- Region: {region}
+
+🔑 **SSH Key Ready for Download**
+Your SSH key '{key_name}' has been created and is ready for download.
+
+⚠️ **Important Security Notes:**
+1. Save this private key to a secure location (e.g., ~/.ssh/{key_name}.pem)
+2. Set proper permissions: chmod 400 ~/.ssh/{key_name}.pem
+3. Never share this private key publicly
+4. Use this key to SSH into your EC2 instances
+5. AWS does not store the private key - this is your only copy!
+
+SSH Usage Example:
+ssh -i ~/.ssh/{key_name}.pem ec2-user@<instance-public-ip>
+
+🔗 **Download your SSH key using the download button below.**"""
+        
+        # Method 2: Check if result has messages (fallback)
+        if not response_text and hasattr(result, 'messages') and result.messages:
+            # Collect all assistant messages and tool outputs
+            all_responses = []
+            tool_outputs = []
+            
+            for message_obj in result.messages:
+                if hasattr(message_obj, 'role'):
+                    if message_obj.role == 'assistant':
+                        if hasattr(message_obj, 'content'):
+                            if isinstance(message_obj.content, list):
+                                # Content is a list of content blocks
+                                for content_block in message_obj.content:
+                                    if hasattr(content_block, 'text'):
+                                        all_responses.append(content_block.text)
+                                        break
+                            else:
+                                all_responses.append(str(message_obj.content))
+                        elif hasattr(message_obj, 'text'):
+                            all_responses.append(message_obj.text)
+                    elif message_obj.role == 'tool':
+                        # Collect tool outputs separately (like key pair creation results)
+                        if hasattr(message_obj, 'content'):
+                            if isinstance(message_obj.content, list):
+                                for content_block in message_obj.content:
+                                    if hasattr(content_block, 'text'):
+                                        tool_outputs.append(content_block.text)
+                                        break
+                            else:
+                                tool_outputs.append(str(message_obj.content))
+                        elif hasattr(message_obj, 'text'):
+                            tool_outputs.append(message_obj.text)
+            
+            # Prioritize tool outputs for key pair creation
+            if tool_outputs:
+                # If we have tool outputs, use them as the primary response
+                response_text = '\n\n'.join(tool_outputs)
+            elif all_responses:
+                # Otherwise, use assistant responses
+                response_text = '\n\n'.join(all_responses)
         
         # Method 2: Direct attributes
         if not response_text:

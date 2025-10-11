@@ -4,8 +4,8 @@ Web Application for Interactive IaC Agent
 A chatbot interface for AWS EC2 instance management
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
+from fastapi.responses import HTMLResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import json
@@ -14,6 +14,8 @@ import os
 from datetime import datetime
 from typing import Dict, List
 import uuid
+import base64
+import tempfile
 
 # Import our interactive agent wrapper
 from .agent_wrapper import interactive_agent
@@ -24,11 +26,12 @@ app = FastAPI(title="IaC Agent WebApp", description="Interactive AWS EC2 Managem
 # Templates directory - pointing to local templates
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
-# Store active connections
+# Store active connections and temporary SSH keys
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self.user_sessions: Dict[str, Dict] = {}
+        self.temporary_keys: Dict[str, Dict] = {}  # Store temporary SSH keys for download
 
     async def connect(self, websocket: WebSocket, user_id: str):
         await websocket.accept()
@@ -64,6 +67,32 @@ class ConnectionManager:
         if user_id in self.user_sessions:
             return self.user_sessions[user_id]["conversation_history"]
         return []
+    
+    def store_temporary_key(self, key_id: str, key_name: str, private_key: str, region: str):
+        """Store a temporary SSH key for download"""
+        self.temporary_keys[key_id] = {
+            "key_name": key_name,
+            "private_key": private_key,
+            "region": region,
+            "created_at": datetime.now(),
+            "expires_at": datetime.now().timestamp() + 3600  # Expires in 1 hour
+        }
+    
+    def get_temporary_key(self, key_id: str) -> Dict:
+        """Get a temporary SSH key"""
+        if key_id in self.temporary_keys:
+            key_data = self.temporary_keys[key_id]
+            # Check if expired
+            if datetime.now().timestamp() > key_data["expires_at"]:
+                del self.temporary_keys[key_id]
+                return None
+            return key_data
+        return None
+    
+    def remove_temporary_key(self, key_id: str):
+        """Remove a temporary SSH key"""
+        if key_id in self.temporary_keys:
+            del self.temporary_keys[key_id]
 
 
 manager = ConnectionManager()
@@ -91,6 +120,42 @@ async def get_active_sessions():
             "message_count": len(session_data["conversation_history"])
         }
     return {"active_sessions": len(sessions), "sessions": sessions}
+
+
+@app.get("/api/download-file/{file_name}")
+async def download_file(file_name: str):
+    """Download the SSH private key file"""
+    ssh_dir = os.path.join(os.path.dirname(__file__), "..", "ssh")
+    file_path = os.path.join(ssh_dir, file_name)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Return the file as a download
+    return FileResponse(
+        path=file_path,
+        filename=file_name,
+        media_type="application/x-pem-file",
+        headers={
+            "Content-Disposition": f"attachment; filename={file_name}"
+        }
+    )
+
+
+@app.get("/api/key-info/{key_id}")
+async def get_key_info(key_id: str):
+    """Get information about a temporary SSH key"""
+    key_data = manager.get_temporary_key(key_id)
+    
+    if not key_data:
+        raise HTTPException(status_code=404, detail="Key not found or expired")
+    
+    return {
+        "key_name": key_data["key_name"],
+        "region": key_data["region"],
+        "created_at": key_data["created_at"].isoformat(),
+        "download_url": f"/api/download-key/{key_id}"
+    }
 
 
 @app.websocket("/ws/{user_id}")
@@ -132,10 +197,179 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     # Get response from the interactive agent wrapper
                     # Run the agent in a thread to avoid blocking
                     loop = asyncio.get_event_loop()
+                    
+                    # Get the original agent response first (before wrapper cleans it)
+                    from iac.interactive_strands_agent import interactive_agent as _original_agent
+                    original_response = await loop.run_in_executor(
+                        None, 
+                        lambda: _original_agent(user_message)
+                    )
+                    
+                    # Get the cleaned response from wrapper
                     agent_response = await loop.run_in_executor(
                         None, 
                         lambda: interactive_agent(user_message)
                     )
+                    
+                    # Check if the response contains a private key (key pair creation)
+                    download_info = None
+                    
+                    # Enhanced detection patterns for key pair creation
+                    key_pair_indicators = [
+                        "key pair" in agent_response.lower() and "created successfully" in agent_response.lower(),
+                        "ssh key" in agent_response.lower() and "ready for download" in agent_response.lower(),
+                        "download your ssh key" in agent_response.lower(),
+                        "key pair details:" in agent_response.lower(),
+                        "ssh usage example:" in agent_response.lower(),
+                        "download button below" in agent_response.lower()
+                    ]
+                    
+                    # Debug logging
+                    print(f"🔍 Key pair detection debug:")
+                    print(f"   Response length: {len(agent_response)}")
+                    print(f"   Contains 'key pair' + 'created successfully': {key_pair_indicators[0]}")
+                    print(f"   Contains 'ssh key' + 'ready for download': {key_pair_indicators[1]}")
+                    print(f"   Contains 'download your ssh key': {key_pair_indicators[2]}")
+                    print(f"   Contains 'key pair details:': {key_pair_indicators[3]}")
+                    print(f"   Contains 'ssh usage example:': {key_pair_indicators[4]}")
+                    print(f"   Contains 'download button below': {key_pair_indicators[5]}")
+                    
+                    if any(key_pair_indicators):
+                        print(f"✅ Key pair creation detected!")
+                        
+                        # Extract key information from the response
+                        try:
+                            # Generate a unique key ID for download
+                            key_id = str(uuid.uuid4())
+                            
+                            # Extract key name from the response (look for various patterns)
+                            import re
+                            key_name_patterns = [
+                                r'Key Name:\s*([^\n]+)',
+                                r'key pair named?\s*[\'"]?([^\s\'"\n]+)',
+                                r'key pair\s+[\'"]?([^\s\'"\n]+)',
+                                r'SSH key\s+[\'"]?([^\s\'"\n]+)',
+                                r'private key\s+[\'"]?([^\s\'"\n]+)'
+                            ]
+                            
+                            key_name = "ssh-key"
+                            for pattern in key_name_patterns:
+                                match = re.search(pattern, agent_response, re.IGNORECASE)
+                                if match:
+                                    key_name = match.group(1).strip()
+                                    break
+                            
+                            # Extract key pair ID
+                            key_pair_id_patterns = [
+                                r'Key Pair ID:\s*([^\n]+)',
+                                r'key pair id:\s*([^\n]+)',
+                                r'key-([a-f0-9]+)'
+                            ]
+                            
+                            key_pair_id = "unknown"
+                            for pattern in key_pair_id_patterns:
+                                match = re.search(pattern, agent_response, re.IGNORECASE)
+                                if match:
+                                    key_pair_id = match.group(1).strip()
+                                    break
+                            
+                            # Extract region
+                            region_patterns = [
+                                r'Region:\s*([^\n]+)',
+                                r'in\s+([a-z0-9-]+)',
+                                r'region\s+([a-z0-9-]+)'
+                            ]
+                            
+                            region = "us-east-1"
+                            for pattern in region_patterns:
+                                match = re.search(pattern, agent_response, re.IGNORECASE)
+                                if match:
+                                    region = match.group(1).strip()
+                                    break
+                            
+                            # Extract the private key content from original response (multiple patterns)
+                            private_key_patterns = [
+                                r'```\n(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)\n```',
+                                r'```(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)```',
+                                r'(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)',
+                                r'PRIVATE KEY.*?\n(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)'
+                            ]
+                            
+                            private_key = None
+                            # Search in original response first, then cleaned response
+                            for response_text in [str(original_response), agent_response]:
+                                for pattern in private_key_patterns:
+                                    match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
+                                    if match:
+                                        private_key = match.group(1).strip()
+                                        break
+                                if private_key:
+                                    break
+                            
+                            if private_key:
+                                print(f"✅ Private key extracted successfully, length: {len(private_key)}")
+                                
+                                # Save the key to a file
+                                ssh_dir = os.path.join(os.path.dirname(__file__), "..", "ssh")
+                                os.makedirs(ssh_dir, exist_ok=True)
+                                
+                                key_file_path = os.path.join(ssh_dir, f"{key_name}.pem")
+                                
+                                try:
+                                    with open(key_file_path, 'w') as f:
+                                        f.write(private_key)
+                                    
+                                    # Set proper permissions (chmod 400)
+                                    os.chmod(key_file_path, 0o400)
+                                    
+                                    print(f"✅ SSH key saved to: {key_file_path}")
+                                    
+                                    # Create download info
+                                    download_info = {
+                                        "key_name": key_name,
+                                        "file_name": f"{key_name}.pem",
+                                        "download_url": f"/api/download-file/{key_name}.pem",
+                                        "instructions": f"Your SSH key '{key_name}' is ready for download. Click the download button below to save it securely."
+                                    }
+                                    
+                                    print(f"✅ Download info created: {download_info}")
+                                    
+                                    # Add download info to the response (without showing private key)
+                                    agent_response = f"""✅ Key pair created successfully!
+
+Key Pair Details:
+- Key Name: {key_name}
+- Key Pair ID: {key_pair_id}
+- Region: {region}
+
+🔑 **SSH Key Ready for Download**
+Your SSH key '{key_name}' has been created and is ready for download.
+
+⚠️ **Important Security Notes:**
+1. Save this private key to a secure location (e.g., ~/.ssh/{key_name}.pem)
+2. Set proper permissions: chmod 400 ~/.ssh/{key_name}.pem
+3. Never share this private key publicly
+4. Use this key to SSH into your EC2 instances
+5. AWS does not store the private key - this is your only copy!
+
+SSH Usage Example:
+ssh -i ~/.ssh/{key_name}.pem ec2-user@<instance-public-ip>
+
+🔗 **Download your SSH key using the download button below.**"""
+                                    
+                                except Exception as file_error:
+                                    print(f"❌ Error saving SSH key to file: {file_error}")
+                                    download_info = None
+                            else:
+                                print(f"❌ Private key content not found in expected format")
+                                print(f"Response preview: {agent_response[:500]}...")
+                        except Exception as e:
+                            print(f"❌ Error during key extraction/storage: {e}")
+                            import traceback
+                            traceback.print_exc()
+                    else:
+                        print(f"❌ Key pair creation not detected based on keywords")
+                        print(f"Response preview: {agent_response[:200]}...")
                     
                     # Send agent response
                     response_message = {
@@ -144,6 +378,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         "content": agent_response,
                         "timestamp": datetime.now().isoformat()
                     }
+                    
+                    # Add download info if available
+                    if download_info:
+                        response_message["download_info"] = download_info
                     
                     await manager.send_personal_message(json.dumps(response_message), websocket)
                     manager.add_to_history(user_id, "assistant", agent_response)
