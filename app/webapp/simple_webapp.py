@@ -1,28 +1,21 @@
 #!/usr/bin/env python3
 """
-Web Application for Interactive IaC Agent
-A chatbot interface for AWS EC2 instance management
+Simple WebApp without external dependencies
+A basic chatbot interface for demonstration
 """
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import json
-import asyncio
 import os
 from datetime import datetime
 from typing import Dict, List
-import uuid
 
-# Import our interactive agent wrapper
-from agent_wrapper import interactive_agent
+app = FastAPI(title="Simple IaC Agent WebApp", description="Basic AWS EC2 Management Chatbot")
 
-
-app = FastAPI(title="IaC Agent WebApp", description="Interactive AWS EC2 Management Chatbot")
-
-# Templates directory
-templates = Jinja2Templates(directory="templates")
+# Templates directory - pointing to local templates
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
 # Store active connections
 class ConnectionManager:
@@ -48,10 +41,6 @@ class ConnectionManager:
     async def send_personal_message(self, message: str, websocket: WebSocket):
         await websocket.send_text(message)
 
-    async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            await connection.send_text(message)
-
     def add_to_history(self, user_id: str, role: str, message: str):
         if user_id in self.user_sessions:
             self.user_sessions[user_id]["conversation_history"].append({
@@ -69,6 +58,29 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def simple_agent_response(message: str) -> str:
+    """Simple mock agent response"""
+    message_lower = message.lower()
+    
+    if "hello" in message_lower or "hi" in message_lower:
+        return "🤖 Hello! I'm your AWS EC2 management assistant. I can help you with basic EC2 operations. What would you like to do?"
+    
+    elif "ec2" in message_lower or "instance" in message_lower:
+        return "🤖 I can help you with EC2 instances! Here are some things I can do:\n• List EC2 instances\n• Create new instances\n• Manage existing instances\n\nNote: This is a demo version. For full functionality, install the required dependencies (openai, strands)."
+    
+    elif "list" in message_lower:
+        return "📋 Here's a demo list of EC2 instances:\n\n• Instance ID: i-1234567890abcdef0\n  Type: t2.micro\n  State: running\n  Public IP: 54.123.45.67\n\n• Instance ID: i-0987654321fedcba0\n  Type: t3.small\n  State: stopped\n  Public IP: N/A\n\nNote: This is demo data. Install dependencies for real AWS integration."
+    
+    elif "create" in message_lower:
+        return "🚀 I can help you create EC2 instances! Here's what I need:\n\n1. Region (e.g., us-west-2)\n2. Instance type (e.g., t2.micro)\n3. Instance name\n\nNote: This is a demo. Install dependencies for real instance creation."
+    
+    elif "help" in message_lower:
+        return "❓ I'm here to help! You can ask me about:\n\n• EC2 instances\n• AWS regions\n• Instance types\n• Creating instances\n• Managing instances\n\nNote: This is a demo version. For full functionality, install the required dependencies."
+    
+    else:
+        return f"🤖 I received your message: '{message}'\n\nI'm a demo AWS EC2 assistant. To get full functionality, please install the required dependencies:\n\n```bash\npip install openai strands-agents\n```\n\nThen restart the server to access the full webapp!"
+
+
 @app.get("/", response_class=HTMLResponse)
 async def get_chat_page(request: Request):
     """Serve the main chat page"""
@@ -78,7 +90,7 @@ async def get_chat_page(request: Request):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+    return {"status": "healthy", "timestamp": datetime.now().isoformat(), "mode": "demo"}
 
 
 @app.get("/api/sessions")
@@ -102,7 +114,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     welcome_message = {
         "type": "message",
         "role": "assistant",
-        "content": "🤖 Hello! I'm your AWS EC2 management assistant. I can help you create, manage, and monitor EC2 instances. What would you like to do today?",
+        "content": "🤖 Hello! I'm your AWS EC2 management assistant (Demo Mode). I can help you learn about EC2 operations. What would you like to know?",
         "timestamp": datetime.now().isoformat()
     }
     
@@ -129,24 +141,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 await manager.send_personal_message(json.dumps(typing_message), websocket)
                 
                 try:
-                    # Get response from the interactive agent wrapper
-                    # Run the agent in a thread to avoid blocking
-                    loop = asyncio.get_event_loop()
-                    agent_response = await loop.run_in_executor(
-                        None, 
-                        lambda: interactive_agent(user_message)
-                    )
+                    # Get response from simple agent
+                    agent_response_text = simple_agent_response(user_message)
                     
                     # Send agent response
                     response_message = {
                         "type": "message",
                         "role": "assistant",
-                        "content": agent_response,
+                        "content": agent_response_text,
                         "timestamp": datetime.now().isoformat()
                     }
                     
                     await manager.send_personal_message(json.dumps(response_message), websocket)
-                    manager.add_to_history(user_id, "assistant", agent_response)
+                    manager.add_to_history(user_id, "assistant", agent_response_text)
                     
                 except Exception as e:
                     error_message = {
@@ -178,8 +185,3 @@ async def get_conversation_history(user_id: str):
     """Get conversation history for a user"""
     history = manager.get_history(user_id)
     return {"user_id": user_id, "history": history}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)

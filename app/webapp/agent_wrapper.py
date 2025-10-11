@@ -3,7 +3,12 @@
 Wrapper for Strands Agent to handle response extraction
 """
 
-from interactive_strands_agent import interactive_agent as _interactive_agent
+import sys
+from pathlib import Path
+
+# Add parent directory to path to import from iac
+sys.path.append(str(Path(__file__).parent.parent))
+from iac.interactive_strands_agent import interactive_agent as _interactive_agent
 
 
 def interactive_agent(message: str) -> str:
