@@ -178,6 +178,11 @@ async def get_active_sessions():
 
 
 
+@router.get("/activity-log", response_class=HTMLResponse)
+async def get_activity_log_page(request: Request):
+    """Serve the activity log page"""
+    print("Serving activity log page")
+    return templates.TemplateResponse("activity_log.html", {"request": request})
 
 
 

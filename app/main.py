@@ -45,11 +45,23 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting FastAPI application.")
-    await mongodb.connect_mongodb()
+    
+    # Try to connect to MongoDB, but don't fail startup if it fails
+    try:
+        await mongodb.connect_mongodb()
+        logger.info("MongoDB connection successful.")
+    except Exception as e:
+        logger.warning(f"MongoDB connection failed: {e}. Application will continue without database.")
     
     yield 
 
-    await mongodb.disconnect_mongodb()
+    # Try to disconnect from MongoDB
+    try:
+        await mongodb.disconnect_mongodb()
+        logger.info("MongoDB disconnected.")
+    except Exception as e:
+        logger.warning(f"MongoDB disconnect failed: {e}")
+    
     logger.info("Stopping FastAPI application.")
 
 
@@ -100,20 +112,59 @@ async def ec2forge_homepage():
 
 # Include webapp routes at /webapp path (if available)
 if WEBAPP_AVAILABLE and webapp_app:
-    # Include the webapp's router instead of mounting to fix WebSocket issues
-    app.include_router(webapp_app.router, prefix="/webapp", tags=["webapp"])
-    
-    # Also add WebSocket route at root level for backward compatibility
-    from webapp.webapp import websocket_endpoint
-    from fastapi import WebSocket
-    
-    @app.websocket("/ws/{user_id}")
-    async def root_websocket_endpoint(websocket: WebSocket, user_id: str):
-        """WebSocket endpoint at root level for backward compatibility"""
-        await websocket_endpoint(websocket, user_id)
-    
-    logger.info(f"Webapp router included at /webapp (mode: {WEBAPP_MODE})")
-    logger.info("WebSocket routes added at both /webapp/ws/ and /ws/ for compatibility")
+    if WEBAPP_MODE == "full":
+        # For full webapp, include router
+        app.include_router(webapp_app.router, prefix="/webapp", tags=["webapp"])
+        
+        # Add WebSocket route at root level for backward compatibility
+        try:
+            from webapp.webapp import websocket_endpoint
+            from fastapi import WebSocket
+            
+            @app.websocket("/ws/{user_id}")
+            async def root_websocket_endpoint(websocket: WebSocket, user_id: str):
+                """WebSocket endpoint at root level for backward compatibility"""
+                await websocket_endpoint(websocket, user_id)
+            
+            logger.info("WebSocket routes added at both /webapp/ws/ and /ws/ for compatibility")
+        except ImportError as e:
+            logger.warning(f"Could not import full webapp WebSocket endpoint: {e}")
+        
+        logger.info(f"Webapp router included at /webapp (mode: {WEBAPP_MODE})")
+    else:
+        # For simple webapp, include its routes directly with /webapp prefix
+        from fastapi import Request
+        from fastapi.responses import HTMLResponse
+        from fastapi.templating import Jinja2Templates
+        import os
+        
+        # Set up templates for simple webapp routes
+        templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "webapp", "templates"))
+        
+        @app.get("/webapp/", response_class=HTMLResponse)
+        async def webapp_home(request: Request):
+            """Serve the webapp home page"""
+            return templates.TemplateResponse("chat.html", {"request": request})
+        
+        @app.get("/webapp/activity-log")
+        @app.get("/webapp/activity-log/")
+        @app.get("/webapp/activity_log")
+        @app.get("/webapp/activity_log/")
+        @app.get("/activity-log")
+        @app.get("/activity-log/")
+        @app.get("/activity_log")
+        @app.get("/activity_log/")
+        async def webapp_activity_log(request: Request):
+            """Serve the activity log page"""
+            return templates.TemplateResponse("activity_log.html", {"request": request})
+        
+        @app.get("/webapp/health")
+        async def webapp_health():
+            """Health check endpoint for webapp"""
+            from datetime import datetime
+            return {"status": "healthy", "timestamp": datetime.now().isoformat(), "mode": "demo"}
+        
+        logger.info(f"Simple webapp routes included at /webapp (mode: {WEBAPP_MODE})")
 else:
     logger.info("Webapp not available - missing dependencies")
 
