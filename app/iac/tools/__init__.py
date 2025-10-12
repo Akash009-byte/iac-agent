@@ -39,6 +39,11 @@ from .data_collection import (
     get_data_collection_status
 )
 
+from .pricing_tools import (
+    get_ec2_pricing,
+    compare_ec2_pricing
+)
+
 __all__ = [
     # Validation
     'validate_required_params',
@@ -71,5 +76,9 @@ __all__ = [
     'get_current_ip_address',
     
     # Data Collection
-    'get_data_collection_status'
+    'get_data_collection_status',
+    
+    # Pricing Tools
+    'get_ec2_pricing',
+    'compare_ec2_pricing'
 ]
