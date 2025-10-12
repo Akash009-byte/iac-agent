@@ -240,7 +240,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         # Get the cleaned response from wrapper
                         agent_response = await loop.run_in_executor(
                             None, 
-                            lambda: interactive_agent(user_message)
+                            lambda: interactive_agent(user_message, user_id, user_id)
                         )
                         
                         # Send agent response

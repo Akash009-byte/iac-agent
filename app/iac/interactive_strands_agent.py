@@ -37,7 +37,7 @@ from .tools import (
 )
 
 
-# Create the interactive Strands agent
+# Create the interactive Strands agent with logging configuration
 interactive_agent = Agent(
     model=OpenAIModel(
         client_args={

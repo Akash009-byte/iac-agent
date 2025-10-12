@@ -26,7 +26,7 @@ class MongoDBLogHandler(logging.Handler):
         """Get MongoDB collection, initialize if needed"""
         if self._collection is None:
             database = get_database()
-            if database:
+            if database is not None:
                 self._collection = database[self.collection_name]
             else:
                 logger.error("Database not available for logging")
@@ -44,6 +44,7 @@ class MongoDBLogHandler(logging.Handler):
             execution_time_ms = getattr(record, 'execution_time_ms', None)
             status = getattr(record, 'status', 'in_progress')
             metadata = getattr(record, 'metadata', {})
+            print(f"================Logging the logs into the collection =============>")
             
             # Create log entry
             log_entry = ActivityLog(
@@ -62,16 +63,28 @@ class MongoDBLogHandler(logging.Handler):
             )
             
             # Insert into MongoDB (async operation in sync context)
-            if self.collection:
-                # Run async operation in thread pool
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    loop.run_until_complete(
-                        self.collection.insert_one(log_entry.dict(by_alias=True))
-                    )
-                finally:
-                    loop.close()
+            if self.collection is not None:
+                print(f"================Logging the logs into the collection if=============>")
+                # Run async operation in thread pool to avoid event loop conflicts
+                import threading
+                
+                def insert_log():
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(
+                                self.collection.insert_one(log_entry.model_dump(by_alias=True, exclude={'id'}))
+                            )
+                        finally:
+                            loop.close()
+                    except Exception as e:
+                        print(f"Error in thread: {e}")
+                
+                # Run in separate thread to avoid event loop conflicts
+                thread = threading.Thread(target=insert_log)
+                thread.daemon = True
+                thread.start()
                     
         except Exception as e:
             # Don't let logging errors break the application
@@ -152,6 +165,33 @@ class ActivityLogger:
             'metadata': metadata or {}
         }
         self.logger.error(message, extra=extra)
+    
+    def log_operation_complete(self, 
+                              tool_name: str, 
+                              operation_type: str, 
+                              message: str,
+                              execution_time_ms: int = None,
+                              status: str = "success",
+                              session_id: Optional[str] = None,
+                              user_id: Optional[str] = None,
+                              details: Optional[Dict[str, Any]] = None,
+                              metadata: Optional[Dict[str, Any]] = None):
+        """Log completion of an operation (success or failure)"""
+        extra = {
+            'tool_name': tool_name,
+            'operation_type': operation_type,
+            'session_id': session_id,
+            'user_id': user_id,
+            'details': details or {},
+            'execution_time_ms': execution_time_ms,
+            'status': status,
+            'metadata': metadata or {}
+        }
+        
+        if status == "success":
+            self.logger.info(message, extra=extra)
+        else:
+            self.logger.error(message, extra=extra)
     
     def log_tool_registration(self, tool_name: str, message: str):
         """Log tool registration events"""

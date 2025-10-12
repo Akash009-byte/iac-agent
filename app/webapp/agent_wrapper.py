@@ -1,26 +1,54 @@
 #!/usr/bin/env python3
 """
-Wrapper for Strands Agent to handle response extraction
+Wrapper for Strands Agent to handle response extraction and activity logging
 """
 
 import sys
+import time
+import uuid
+from datetime import datetime
 from pathlib import Path
 
 # Add parent directory to path to import from iac
 sys.path.append(str(Path(__file__).parent.parent))
 from iac.interactive_strands_agent import interactive_agent as _interactive_agent
+from core.activity_logger import activity_logger
 
 
-def interactive_agent(message: str) -> str:
+def interactive_agent(message: str, session_id: str = None, user_id: str = "demo_user") -> str:
     """
-    Wrapper function that extracts text content from Strands AgentResult
+    Wrapper function that extracts text content from Strands AgentResult and logs activity
     
     Args:
         message: User message to send to the agent
+        session_id: Session ID for tracking
+        user_id: User ID for tracking
     
     Returns:
         String response from the agent
     """
+    if not session_id:
+        session_id = f"session_{uuid.uuid4().hex[:8]}"
+    
+    start_time = time.time()
+    
+    # Log the query start
+    activity_logger.log_operation_start(
+        tool_name="strands_agent",
+        operation_type="query_processing",
+        message=f"Processing user query: {message[:100]}...",
+        session_id=session_id,
+        user_id=user_id,
+        details={
+            "query": message,
+            "started_at": datetime.now().isoformat()
+        },
+        metadata={
+            "agent_type": "strands",
+            "model": "gpt-4o"
+        }
+    )
+    
     try:
         # Get the agent result
         result = _interactive_agent(message)
@@ -108,9 +136,47 @@ def interactive_agent(message: str) -> str:
         print(f"🔍 Agent wrapper: Final response length: {len(response_text)}")
         print(f"🔍 Agent wrapper: Final response preview: {response_text[:200]}...")
         
+        # Log successful completion
+        execution_time = int((time.time() - start_time) * 1000)  # Convert to milliseconds
+        activity_logger.log_operation_complete(
+            tool_name="strands_agent",
+            operation_type="query_processing",
+            message=f"Successfully processed query and generated response",
+            session_id=session_id,
+            user_id=user_id,
+            execution_time_ms=execution_time,
+            status="success",
+            details={
+                "response_length": len(response_text),
+                "completed_at": datetime.now().isoformat()
+            },
+            metadata={
+                "response_preview": response_text[:200] + "..." if len(response_text) > 200 else response_text
+            }
+        )
+        
         return response_text
         
     except Exception as e:
+        # Log error
+        execution_time = int((time.time() - start_time) * 1000)  # Convert to milliseconds
+        activity_logger.log_operation_complete(
+            tool_name="strands_agent",
+            operation_type="query_processing",
+            message=f"Failed to process query: {str(e)}",
+            session_id=session_id,
+            user_id=user_id,
+            execution_time_ms=execution_time,
+            status="failure",
+            details={
+                "error": str(e),
+                "failed_at": datetime.now().isoformat()
+            },
+            metadata={
+                "error_type": type(e).__name__
+            }
+        )
+        
         return f"I'm sorry, I encountered an error: {str(e)}. Please try again."
 
 
