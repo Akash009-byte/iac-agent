@@ -28,35 +28,8 @@ def interactive_agent(message: str) -> str:
         # Extract text content from AgentResult
         response_text = None
         
-        # Method 1: Check traces for tool outputs (for key pair creation)
-        if hasattr(result, 'metrics') and hasattr(result.metrics, 'traces'):
-            tool_outputs = []
-            for trace in result.metrics.traces:
-                if hasattr(trace, 'children'):
-                    for child in trace.children:
-                        if hasattr(child, 'name') and 'Tool:' in child.name:
-                            if hasattr(child, 'message') and child.message:
-                                message = child.message
-                                if isinstance(message, dict) and 'content' in message:
-                                    content = message['content']
-                                    if isinstance(content, list):
-                                        for content_block in content:
-                                            if isinstance(content_block, dict) and 'toolResult' in content_block:
-                                                tool_result = content_block['toolResult']
-                                                if 'content' in tool_result:
-                                                    tool_content = tool_result['content']
-                                                    if isinstance(tool_content, list):
-                                                        for tool_block in tool_content:
-                                                            if isinstance(tool_block, dict) and 'text' in tool_block:
-                                                                tool_outputs.append(tool_block['text'])
-            
-            if tool_outputs:
-                # Use tool outputs as the primary response
-                response_text = '\n\n'.join(tool_outputs)
-                
-        
-        # Method 2: Check if result has messages (fallback)
-        if not response_text and hasattr(result, 'messages') and result.messages:
+        # Method 1: Check if result has messages (primary method)
+        if hasattr(result, 'messages') and result.messages:
             # Collect all assistant messages and tool outputs
             all_responses = []
             tool_outputs = []
@@ -76,7 +49,7 @@ def interactive_agent(message: str) -> str:
                         elif hasattr(message_obj, 'text'):
                             all_responses.append(message_obj.text)
                     elif message_obj.role == 'tool':
-                        # Collect tool outputs separately (like key pair creation results)
+                        # Collect tool outputs separately
                         if hasattr(message_obj, 'content'):
                             if isinstance(message_obj.content, list):
                                 for content_block in message_obj.content:
@@ -88,13 +61,29 @@ def interactive_agent(message: str) -> str:
                         elif hasattr(message_obj, 'text'):
                             tool_outputs.append(message_obj.text)
             
-            # Prioritize tool outputs for key pair creation
-            if tool_outputs:
-                # If we have tool outputs, use them as the primary response
-                response_text = '\n\n'.join(tool_outputs)
-            elif all_responses:
-                # Otherwise, use assistant responses
+            # Prioritize assistant responses, then add tool outputs
+            if all_responses:
                 response_text = '\n\n'.join(all_responses)
+                print(f"🔍 Agent wrapper: Found {len(all_responses)} assistant responses")
+                print(f"🔍 Agent wrapper: Assistant response preview: {response_text[:200]}...")
+                
+                # Add tool outputs if they exist and are different from assistant response
+                if tool_outputs:
+                    tool_text = '\n\n'.join(tool_outputs)
+                    print(f"🔍 Agent wrapper: Found {len(tool_outputs)} tool outputs")
+                    print(f"🔍 Agent wrapper: Tool output preview: {tool_text[:200]}...")
+                    
+                    # Only add tool output if it's different from the assistant response
+                    if tool_text not in response_text:
+                        response_text += '\n\n' + tool_text
+                        print("🔍 Agent wrapper: Added tool output to response")
+                    else:
+                        print("🔍 Agent wrapper: Tool output already included in assistant response")
+            elif tool_outputs:
+                # Fallback to tool outputs if no assistant response
+                response_text = '\n\n'.join(tool_outputs)
+                print(f"🔍 Agent wrapper: No assistant response, using {len(tool_outputs)} tool outputs")
+                
         
         # Method 2: Direct attributes
         if not response_text:
@@ -114,6 +103,10 @@ def interactive_agent(message: str) -> str:
         # Ensure we have a valid response
         if not response_text or response_text.strip() == "":
             response_text = "I'm sorry, I couldn't process your request. Please try again."
+            print("🔍 Agent wrapper: No response text found, using fallback message")
+        
+        print(f"🔍 Agent wrapper: Final response length: {len(response_text)}")
+        print(f"🔍 Agent wrapper: Final response preview: {response_text[:200]}...")
         
         return response_text
         
