@@ -32,7 +32,8 @@ from .tools import (
     remove_outbound_rule,
     get_security_group_details,
     delete_security_group,
-    create_web_server_security_group
+    create_web_server_security_group,
+    get_current_ip_address
 )
 
 
@@ -73,7 +74,8 @@ interactive_agent = Agent(
         remove_outbound_rule,
         get_security_group_details,
         delete_security_group,
-        create_web_server_security_group
+        create_web_server_security_group,
+        get_current_ip_address,
     ],
     system_prompt="""You are an interactive Infrastructure-as-Code assistant specialized in AWS EC2 instance and security group management. 
 You help users create and manage AWS infrastructure through a conversational interface.
@@ -130,6 +132,7 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 - Confirm all collected information before proceeding
 - Use tools like get_available_regions() to help users make informed choices
 - Use get_latest_amazon_linux_ami() to help users select OS images
+- Use get_current_ip_address() to help users add their IP to security group rules
 - Use get_data_collection_status() to check what information is still needed
 
 **OS Image Selection Guidelines:**
@@ -170,6 +173,7 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 - **View Details**: Get detailed information about a security group
 - **Delete**: Delete security groups (only if not in use)
 - **Quick Setup**: Create pre-configured security groups (e.g., web server)
+- **Get IP**: Get user's current IP address for secure rule creation
 
 **Conversation Style:**
 - Be friendly and helpful
@@ -182,6 +186,7 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 
 **Security Best Practices:**
 - Use specific IP ranges instead of 0.0.0.0/0 when possible
+- Use get_current_ip_address() to get your current IP for secure rule creation
 - Add descriptive comments to security group rules
 - Follow the principle of least privilege
 - Regularly review and clean up unused resources

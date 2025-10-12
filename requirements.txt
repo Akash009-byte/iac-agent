@@ -21,5 +21,6 @@ strands-agents-builder
 # AWS SDK for infrastructure automation
 boto3==1.34.0
 botocore==1.34.0
+requests==2.31.0
 
 # Removed Chainlit - using custom HTML UI

@@ -3,6 +3,7 @@ Security Group management tools for the IaC Agent
 """
 
 import os
+import requests
 from datetime import datetime
 from typing import Optional
 from strands import tool
@@ -422,3 +423,40 @@ This security group is ready to use with web servers!
         
     except Exception as e:
         return f"❌ Error creating web server security group: {str(e)}"
+
+
+@tool
+def get_current_ip_address() -> str:
+    """Get the current public IP address of the user"""
+    try:
+        # Try multiple IP services for reliability
+        ip_services = [
+            "https://api.ipify.org",
+            "https://ipinfo.io/ip",
+            "https://checkip.amazonaws.com",
+            "https://icanhazip.com"
+        ]
+        
+        for service in ip_services:
+            try:
+                response = requests.get(service, timeout=5)
+                if response.status_code == 200:
+                    ip_address = response.text.strip()
+                    if ip_address and len(ip_address.split('.')) == 4:
+                        return f"""🌐 Your current public IP address: {ip_address}
+
+💡 **Usage Tips:**
+- Use this IP address in security group rules to allow access only from your current location
+- For inbound rules: Source IP = {ip_address}/32
+- For outbound rules: Destination IP = {ip_address}/32
+- Note: Your IP may change if you're using a dynamic connection
+
+🔒 **Security Best Practice:**
+Using your specific IP address ({ip_address}/32) is more secure than using 0.0.0.0/0 (all IPs) as it restricts access to only your current location."""
+            except Exception:
+                continue
+        
+        return "❌ Unable to determine your current IP address. Please check your internet connection or specify an IP address manually."
+        
+    except Exception as e:
+        return f"❌ Error getting IP address: {str(e)}"

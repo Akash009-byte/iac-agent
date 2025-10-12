@@ -31,7 +31,8 @@ from .security_group_tools import (
     remove_outbound_rule,
     get_security_group_details,
     delete_security_group,
-    create_web_server_security_group
+    create_web_server_security_group,
+    get_current_ip_address
 )
 
 from .data_collection import (
@@ -67,6 +68,7 @@ __all__ = [
     'get_security_group_details',
     'delete_security_group',
     'create_web_server_security_group',
+    'get_current_ip_address',
     
     # Data Collection
     'get_data_collection_status'
