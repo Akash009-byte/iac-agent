@@ -200,6 +200,52 @@
 
         .page-header {
             margin-bottom: 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .page-title-section {
+            flex: 1;
+        }
+
+        .page-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .sync-btn {
+            background: var(--ec2forge-primary);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .sync-btn:hover {
+            background: var(--ec2forge-primary-dark);
+            transform: translateY(-1px);
+        }
+
+        .sync-btn:active {
+            transform: translateY(0);
+        }
+
+        .sync-btn i {
+            transition: transform 0.3s;
+        }
+
+        .sync-btn:hover i {
+            transform: rotate(180deg);
         }
 
         .page-title {
@@ -218,7 +264,130 @@
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
             gap: 1.5rem;
-            margin-top: 2rem;
+        }
+
+        /* Status styling */
+        .status-running {
+            color: #4caf50;
+        }
+
+        .status-stopped {
+            color: #ff9800;
+        }
+
+        .status-terminated {
+            color: #f44336;
+        }
+
+        .status-pending {
+            color: #2196f3;
+        }
+
+        .status-stopping,
+        .status-starting {
+            color: #9c27b0;
+        }
+
+        .status-unknown {
+            color: var(--ec2forge-text-secondary);
+        }
+
+        /* Tags styling */
+        .tag {
+            display: inline-block;
+            background: var(--ec2forge-primary);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin: 2px;
+        }
+
+        .tag-key {
+            font-weight: 600;
+        }
+
+        .tag-value {
+            margin-left: 4px;
+        }
+
+        .no-tags {
+            color: var(--ec2forge-text-secondary);
+            font-style: italic;
+            font-size: 14px;
+        }
+
+        /* Loading, Error, and Empty States */
+        .loading-state,
+        .error-state,
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem 2rem;
+            text-align: center;
+            min-height: 300px;
+            grid-column: 1 / -1;
+        }
+
+        .loading-spinner {
+            font-size: 2rem;
+            color: var(--ec2forge-primary);
+            margin-bottom: 1rem;
+        }
+
+        .empty-icon,
+        .error-icon {
+            font-size: 3rem;
+            color: var(--ec2forge-text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .retry-btn {
+            background: var(--ec2forge-primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: background 0.3s;
+        }
+
+        .retry-btn:hover {
+            background: var(--ec2forge-primary-dark);
+        }
+
+        /* Success Notification */
+        .success-notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4caf50;
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .notification-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
         }
 
         .instance-card {
@@ -564,8 +733,16 @@
         <!-- Main Content -->
         <main class="content">
             <div class="page-header">
-                <h1 class="page-title">My Instances</h1>
-                <p class="page-subtitle">Manage and monitor your AWS EC2 instances</p>
+                <div class="page-title-section">
+                    <h1 class="page-title">My Instances</h1>
+                    <p class="page-subtitle">Manage and monitor your AWS EC2 instances</p>
+                </div>
+                <div class="page-actions">
+                    <button class="sync-btn" onclick="syncInstances()">
+                        <i class="fas fa-sync-alt"></i>
+                        Sync from AWS
+                    </button>
+                </div>
             </div>
 
             <!-- Stats Cards -->
@@ -847,22 +1024,284 @@
     </footer>
 
     <script>
-        // Simple JavaScript for future functionality
+        // Enhanced JavaScript for real EC2 data integration
         document.addEventListener('DOMContentLoaded', function() {
             console.log('My Instances page loaded');
             
-            // Add click handlers for action buttons
-            document.querySelectorAll('.action-btn').forEach(button => {
-                button.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const action = this.textContent.trim();
-                    console.log(`Action clicked: ${action}`);
-                    
-                    // TODO: Implement actual functionality
-                    alert(`Action "${action}" will be implemented soon!`);
-                });
-            });
+            // Load EC2 instances on page load
+            loadEC2Instances();
+            
         });
+
+        // Load EC2 instances from API
+        async function loadEC2Instances() {
+            try {
+                showLoadingState();
+                
+                const response = await fetch('/api/ec2/instances');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const instances = await response.json();
+                console.log('Loaded instances:', instances);
+                
+                renderInstances(instances);
+                updateStats(instances);
+                
+            } catch (error) {
+                console.error('Error loading instances:', error);
+                showErrorState(error.message);
+            }
+        }
+
+        // Sync instances from AWS
+        async function syncInstances() {
+            try {
+                showLoadingState();
+                
+                const response = await fetch('/api/ec2/instances/sync', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                console.log('Sync result:', result);
+                
+                // Reload instances after sync
+                await loadEC2Instances();
+                
+                showSuccessMessage(`Successfully synced ${result.instances_count} instances`);
+                
+            } catch (error) {
+                console.error('Error syncing instances:', error);
+                showErrorState(error.message);
+            }
+        }
+
+        // Render instances in the UI
+        function renderInstances(instances) {
+            const instancesContainer = document.querySelector('.instances-grid');
+            if (!instancesContainer) return;
+            
+            if (instances.length === 0) {
+                instancesContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">
+                            <i class="fas fa-server"></i>
+                        </div>
+                        <h3>No EC2 Instances Found</h3>
+                        <p>You don't have any EC2 instances yet. Launch your first instance to get started!</p>
+                        <button class="launch-button" onclick="window.location.href='/webapp/'">
+                            <i class="fas fa-rocket"></i>
+                            Launch New Instance
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            instancesContainer.innerHTML = instances.map(instance => `
+                <div class="instance-card" data-instance-id="${instance.instance_id}">
+                    <div class="instance-header">
+                        <div class="instance-info">
+                            <h3 class="instance-name">${instance.instance_name || 'Unnamed Instance'}</h3>
+                            <span class="instance-id">${instance.instance_id}</span>
+                        </div>
+                        <div class="instance-status ${getStatusClass(instance.state)}">
+                            <i class="fas ${getStatusIcon(instance.state)}"></i>
+                            ${instance.state}
+                        </div>
+                    </div>
+                    
+                    <div class="instance-details">
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">${instance.instance_type}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Region:</span>
+                            <span class="detail-value">${instance.region}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Public IP:</span>
+                            <span class="detail-value">${instance.public_ip || 'N/A'}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Private IP:</span>
+                            <span class="detail-value">${instance.private_ip || 'N/A'}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Launched:</span>
+                            <span class="detail-value">${formatDate(instance.launch_time)}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Runtime:</span>
+                            <span class="detail-value">${formatRuntime(instance.runtime_seconds)}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Last Updated:</span>
+                            <span class="detail-value">${formatDate(instance.last_updated)}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="instance-tags">
+                        ${renderTags(instance.tags)}
+                    </div>
+                    
+                </div>
+            `).join('');
+            
+        }
+
+        // Update statistics
+        function updateStats(instances) {
+            const totalInstances = instances.length;
+            const runningInstances = instances.filter(inst => inst.state === 'running').length;
+            const stoppedInstances = instances.filter(inst => inst.state === 'stopped').length;
+            const terminatedInstances = instances.filter(inst => inst.state === 'terminated').length;
+            const pendingInstances = instances.filter(inst => inst.state === 'pending').length;
+            
+            // Update stat cards - using array index since there are no specific classes
+            const statNumbers = document.querySelectorAll('.stat-number');
+            if (statNumbers.length >= 4) {
+                statNumbers[0].textContent = runningInstances;    // Running
+                statNumbers[1].textContent = stoppedInstances;    // Stopped  
+                statNumbers[2].textContent = pendingInstances;   // Pending
+                statNumbers[3].textContent = totalInstances;     // Total
+            }
+        }
+
+        // Render tags
+        function renderTags(tags) {
+            if (!tags || Object.keys(tags).length === 0) {
+                return '<div class="no-tags">No tags</div>';
+            }
+            
+            return Object.entries(tags).map(([key, value]) => `
+                <span class="tag">
+                    <span class="tag-key">${key}:</span>
+                    <span class="tag-value">${value}</span>
+                </span>
+            `).join('');
+        }
+
+        // Get status class for styling
+        function getStatusClass(state) {
+            const statusMap = {
+                'running': 'status-running',
+                'stopped': 'status-stopped',
+                'pending': 'status-pending',
+                'terminated': 'status-terminated',
+                'stopping': 'status-stopping',
+                'starting': 'status-starting'
+            };
+            return statusMap[state] || 'status-unknown';
+        }
+
+        // Get status icon
+        function getStatusIcon(state) {
+            const iconMap = {
+                'running': 'fa-check-circle',
+                'stopped': 'fa-pause-circle',
+                'pending': 'fa-clock',
+                'terminated': 'fa-times-circle',
+                'stopping': 'fa-spinner fa-spin',
+                'starting': 'fa-spinner fa-spin'
+            };
+            return iconMap[state] || 'fa-question-circle';
+        }
+
+        // Format date for display
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        }
+
+        // Format runtime duration
+        function formatRuntime(runtimeSeconds) {
+            if (!runtimeSeconds || runtimeSeconds < 0) return 'N/A';
+            
+            const seconds = Math.floor(runtimeSeconds);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+            
+            if (days > 0) {
+                const remainingHours = hours % 24;
+                return `${days}d ${remainingHours}h`;
+            } else if (hours > 0) {
+                const remainingMinutes = minutes % 60;
+                return `${hours}h ${remainingMinutes}m`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${seconds % 60}s`;
+            } else {
+                return `${seconds}s`;
+            }
+        }
+
+
+        // Show loading state
+        function showLoadingState() {
+            const instancesContainer = document.querySelector('.instances-grid');
+            if (instancesContainer) {
+                instancesContainer.innerHTML = `
+                    <div class="loading-state">
+                        <div class="loading-spinner">
+                            <i class="fas fa-spinner fa-spin"></i>
+                        </div>
+                        <p>Loading EC2 instances...</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Show error state
+        function showErrorState(message) {
+            const instancesContainer = document.querySelector('.instances-grid');
+            if (instancesContainer) {
+                instancesContainer.innerHTML = `
+                    <div class="error-state">
+                        <div class="error-icon">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <h3>Error Loading Instances</h3>
+                        <p>${message}</p>
+                        <button class="retry-btn" onclick="loadEC2Instances()">
+                            <i class="fas fa-redo"></i>
+                            Retry
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        // Show success message
+        function showSuccessMessage(message) {
+            // Create a temporary success notification
+            const notification = document.createElement('div');
+            notification.className = 'success-notification';
+            notification.innerHTML = `
+                <div class="notification-content">
+                    <i class="fas fa-check-circle"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
     </script>
 </body>
 </html>
