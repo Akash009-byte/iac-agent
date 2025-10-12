@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 import uvicorn
 from api.router_config import api_router
 from core import mongodb
@@ -9,6 +10,8 @@ from contextlib import asynccontextmanager
 import os
 import logging
 import asyncio
+from pathlib import Path
+
 # Import webapp with fallback for missing dependencies
 try:
     from webapp.webapp import app as webapp_app
@@ -27,6 +30,9 @@ except ImportError as e:
         webapp_app = None
         WEBAPP_MODE = "none"
 
+# Chainlit removed - using custom HTML UI
+CHAINLIT_AVAILABLE = False
+
 SERVER_PORT = int(os.getenv("SERVER_PORT", 5001))
 
 # Configure logging
@@ -40,7 +46,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting FastAPI application.")
     await mongodb.connect_mongodb()
-
+    
     yield 
 
     await mongodb.disconnect_mongodb()
@@ -64,12 +70,52 @@ app.add_middleware(
 
 app.include_router(api_router)
 
-# Include webapp routes at root path (if available)
+# Add EC2Forge Homepage route FIRST (takes precedence)
+@app.get("/", response_class=HTMLResponse)
+async def ec2forge_homepage():
+    """Serve EC2Forge Homepage"""
+    html_file = Path(__file__).parent / "webapp" / "templates" / "index.html"
+    if html_file.exists():
+        with open(html_file, 'r') as f:
+            return HTMLResponse(content=f.read(), status_code=200)
+    else:
+        return HTMLResponse(content="EC2Forge Homepage not found", status_code=404)
+
+# Include webapp routes at /webapp path (if available)
 if WEBAPP_AVAILABLE and webapp_app:
-    app.include_router(webapp_app.router, tags=["webapp"])
-    logger.info(f"Webapp routes included at / (mode: {WEBAPP_MODE})")
+    # Mount the webapp as a sub-application instead of including router
+    from fastapi import FastAPI
+    app.mount("/webapp", webapp_app)
+    logger.info(f"Webapp mounted at /webapp (mode: {WEBAPP_MODE})")
 else:
     logger.info("Webapp not available - missing dependencies")
 
+# Add EC2Forge UI information endpoint
+@app.get("/ec2forge-ui")
+async def ec2forge_ui_info():
+    """Information about EC2Forge UI"""
+    return {
+        "available": True,
+        "url": f"http://localhost:{SERVER_PORT}/",
+        "port": SERVER_PORT,
+        "description": "EC2Forge - Instant AWS Instances UI",
+        "features": [
+            "AI-Powered Automation",
+            "Templates & Blueprints", 
+            "Real-time Monitoring",
+            "Visual Operation Progress"
+        ]
+    }
+
 if __name__ == "__main__":
+    print("=" * 60)
+    print("🌩️ EC2Forge - Instant AWS Instances")
+    print("   Streamline Your AWS EC2 Provisioning")
+    print("=" * 60)
+    print(f"🚀 Starting FastAPI server on port {SERVER_PORT}")
+    print(f"🎨 EC2Forge Homepage available at: http://localhost:{SERVER_PORT}/")
+    print("📊 API docs available at: http://localhost:{}/docs".format(SERVER_PORT))
+    print("🔍 EC2Forge UI info: http://localhost:{}/ec2forge-ui".format(SERVER_PORT))
+    print("=" * 60)
+    
     uvicorn.run("main:app", host="0.0.0.0", port=SERVER_PORT, reload=True)

@@ -54,6 +54,23 @@ gunicorn -c gunicorn_dev_config.py main:app
 
 Open [http://localhost:5001/management/health/readiness](http://localhost:5001/management/health/readiness) to view it in your browser.
 
+## EC2Forge UI
+
+The application includes a modern EC2Forge homepage interface:
+
+- **EC2Forge Homepage**: [http://localhost:5001/](http://localhost:5001/) - Modern interface for AWS EC2 management
+- **UI Info**: [http://localhost:5001/ec2forge-ui](http://localhost:5001/ec2forge-ui) - Check UI availability and features
+
+### Features:
+- AI-Powered Automation with intelligent agent
+- Templates & Blueprints for one-click deployment  
+- Real-time Monitoring with live updates
+- Visual Operation Progress tracking
+- Dark Theme matching EC2Forge design
+- Interactive Chat Interface for instance management
+- Responsive design for desktop and mobile
+- Modern icons and professional styling
+
 ## Containerization
 
 Build the docker image: `docker build -t agent:latest .`
