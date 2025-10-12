@@ -68,6 +68,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add WebSocket CORS middleware
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class WebSocketCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.url.path.startswith("/ws/") or request.url.path.startswith("/webapp/ws/"):
+            # Allow WebSocket connections from any origin
+            response = await call_next(request)
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+            return response
+        return await call_next(request)
+
+app.add_middleware(WebSocketCORSMiddleware)
+
 app.include_router(api_router)
 
 # Add EC2Forge Homepage route FIRST (takes precedence)
@@ -83,10 +100,20 @@ async def ec2forge_homepage():
 
 # Include webapp routes at /webapp path (if available)
 if WEBAPP_AVAILABLE and webapp_app:
-    # Mount the webapp as a sub-application instead of including router
-    from fastapi import FastAPI
-    app.mount("/webapp", webapp_app)
-    logger.info(f"Webapp mounted at /webapp (mode: {WEBAPP_MODE})")
+    # Include the webapp's router instead of mounting to fix WebSocket issues
+    app.include_router(webapp_app.router, prefix="/webapp", tags=["webapp"])
+    
+    # Also add WebSocket route at root level for backward compatibility
+    from webapp.webapp import websocket_endpoint
+    from fastapi import WebSocket
+    
+    @app.websocket("/ws/{user_id}")
+    async def root_websocket_endpoint(websocket: WebSocket, user_id: str):
+        """WebSocket endpoint at root level for backward compatibility"""
+        await websocket_endpoint(websocket, user_id)
+    
+    logger.info(f"Webapp router included at /webapp (mode: {WEBAPP_MODE})")
+    logger.info("WebSocket routes added at both /webapp/ws/ and /ws/ for compatibility")
 else:
     logger.info("Webapp not available - missing dependencies")
 

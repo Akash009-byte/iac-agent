@@ -4,7 +4,7 @@ Web Application for Interactive IaC Agent
 A chatbot interface for AWS EC2 instance management
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException, APIRouter
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -19,6 +19,7 @@ from .agent_wrapper import interactive_agent
 
 
 app = FastAPI(title="IaC Agent WebApp", description="Interactive AWS EC2 Management Chatbot")
+router = APIRouter()
 
 # Templates directory - pointing to local templates
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
@@ -31,22 +32,41 @@ class ConnectionManager:
         self.temporary_keys: Dict[str, Dict] = {}  # Store temporary SSH keys for download
 
     async def connect(self, websocket: WebSocket, user_id: str):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-        self.user_sessions[user_id] = {
-            "websocket": websocket,
-            "conversation_history": [],
-            "created_at": datetime.now(),
-        }
+        try:
+            await websocket.accept()
+            self.active_connections.append(websocket)
+            self.user_sessions[user_id] = {
+                "websocket": websocket,
+                "conversation_history": [],
+                "created_at": datetime.now(),
+                "last_ping": datetime.now(),
+                "connection_status": "connected"
+            }
+            print(f"✅ WebSocket connected for user: {user_id}")
+        except Exception as e:
+            print(f"❌ WebSocket connection failed for user {user_id}: {e}")
 
     def disconnect(self, websocket: WebSocket, user_id: str):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-        if user_id in self.user_sessions:
-            del self.user_sessions[user_id]
+        try:
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
+            if user_id in self.user_sessions:
+                self.user_sessions[user_id]["connection_status"] = "disconnected"
+                print(f"🔌 WebSocket disconnected for user: {user_id}")
+        except Exception as e:
+            print(f"❌ Error during disconnect for user {user_id}: {e}")
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
+        try:
+            if websocket.client_state == websocket.client_state.CONNECTED:
+                await websocket.send_text(message)
+            else:
+                print("⚠️ WebSocket not connected, message not sent")
+        except Exception as e:
+            print(f"❌ Error sending message: {e}")
+            # Try to remove the connection if it's broken
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
 
     async def broadcast(self, message: str):
         for connection in self.active_connections:
@@ -94,20 +114,52 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# Background task to clean up stale connections
+async def cleanup_stale_connections():
+    """Clean up stale WebSocket connections"""
+    while True:
+        try:
+            current_time = datetime.now()
+            stale_users = []
+            
+            for user_id, session in manager.user_sessions.items():
+                if "last_ping" in session:
+                    time_diff = current_time - session["last_ping"]
+                    if time_diff.total_seconds() > 300:  # 5 minutes timeout
+                        stale_users.append(user_id)
+            
+            for user_id in stale_users:
+                print(f"🧹 Cleaning up stale connection for user: {user_id}")
+                if user_id in manager.user_sessions:
+                    session = manager.user_sessions[user_id]
+                    if "websocket" in session:
+                        websocket = session["websocket"]
+                        manager.disconnect(websocket, user_id)
+                        
+        except Exception as e:
+            print(f"❌ Error in cleanup task: {e}")
+        
+        await asyncio.sleep(60)  # Run cleanup every minute
 
-@app.get("/", response_class=HTMLResponse)
+# Start cleanup task when app starts
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(cleanup_stale_connections())
+
+
+@router.get("/", response_class=HTMLResponse)
 async def get_chat_page(request: Request):
     """Serve the main chat page"""
     return templates.TemplateResponse("chat.html", {"request": request})
 
 
-@app.get("/health")
+@router.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
-@app.get("/api/sessions")
+@router.get("/api/sessions")
 async def get_active_sessions():
     """Get active user sessions"""
     sessions = {}
@@ -123,101 +175,129 @@ async def get_active_sessions():
 
 
 
-@app.websocket("/ws/{user_id}")
+@router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     """WebSocket endpoint for chat communication"""
-    await manager.connect(websocket, user_id)
-    
-    # Send welcome message
-    welcome_message = {
-        "type": "message",
-        "role": "assistant",
-        "content": "🤖 Hello! I'm your AWS EC2 management assistant. I can help you create, manage, and monitor EC2 instances. What would you like to do today?",
-        "timestamp": datetime.now().isoformat()
-    }
-    
-    await manager.send_personal_message(json.dumps(welcome_message), websocket)
-    manager.add_to_history(user_id, "assistant", welcome_message["content"])
-    
     try:
+        await manager.connect(websocket, user_id)
+        
+        # Send welcome message
+        welcome_message = {
+            "type": "message",
+            "role": "assistant",
+            "content": "🤖 Hello! I'm your AWS EC2 management assistant. I can help you create, manage, and monitor EC2 instances. What would you like to do today?",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        await manager.send_personal_message(json.dumps(welcome_message), websocket)
+        manager.add_to_history(user_id, "assistant", welcome_message["content"])
+        
+        # Main message loop with improved error handling
         while True:
-            # Receive message from client
-            data = await websocket.receive_text()
-            message_data = json.loads(data)
-            
-            if message_data["type"] == "message":
-                user_message = message_data["content"]
+            try:
+                # Check if connection is still alive
+                if websocket.client_state != websocket.client_state.CONNECTED:
+                    print(f"⚠️ WebSocket disconnected for user {user_id}")
+                    break
                 
-                # Add user message to history
-                manager.add_to_history(user_id, "user", user_message)
+                # Receive message from client with timeout
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                message_data = json.loads(data)
                 
-                # Send typing indicator
-                typing_message = {
-                    "type": "typing",
-                    "role": "assistant"
-                }
-                await manager.send_personal_message(json.dumps(typing_message), websocket)
+                # Update last ping time
+                if user_id in manager.user_sessions:
+                    manager.user_sessions[user_id]["last_ping"] = datetime.now()
                 
-                try:
-                    # Get response from the interactive agent wrapper
-                    # Run the agent in a thread to avoid blocking
-                    loop = asyncio.get_event_loop()
+                if message_data["type"] == "message":
+                    user_message = message_data["content"]
                     
-                    # Get the original agent response first (before wrapper cleans it)
-                    from iac.interactive_strands_agent import interactive_agent as _original_agent
-                    original_response = await loop.run_in_executor(
-                        None, 
-                        lambda: _original_agent(user_message)
-                    )
+                    # Add user message to history
+                    manager.add_to_history(user_id, "user", user_message)
                     
-                    # Get the cleaned response from wrapper
-                    agent_response = await loop.run_in_executor(
-                        None, 
-                        lambda: interactive_agent(user_message)
-                    )
+                    # Send typing indicator
+                    typing_message = {
+                        "type": "typing",
+                        "role": "assistant"
+                    }
+                    await manager.send_personal_message(json.dumps(typing_message), websocket)
                     
-                    
-                    # Send agent response
-                    response_message = {
-                        "type": "message",
-                        "role": "assistant",
-                        "content": agent_response,
+                    try:
+                        # Get response from the interactive agent wrapper
+                        # Run the agent in a thread to avoid blocking
+                        loop = asyncio.get_event_loop()
+                        
+                        # Get the cleaned response from wrapper
+                        agent_response = await loop.run_in_executor(
+                            None, 
+                            lambda: interactive_agent(user_message)
+                        )
+                        
+                        # Send agent response
+                        response_message = {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": agent_response,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        
+                        await manager.send_personal_message(json.dumps(response_message), websocket)
+                        manager.add_to_history(user_id, "assistant", agent_response)
+                        
+                    except Exception as e:
+                        print(f"❌ Agent error for user {user_id}: {e}")
+                        error_message = {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": f"❌ Sorry, I encountered an error: {str(e)}. Please try again.",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        await manager.send_personal_message(json.dumps(error_message), websocket)
+                        manager.add_to_history(user_id, "assistant", error_message["content"])
+                
+                elif message_data["type"] == "ping":
+                    # Respond to ping with pong
+                    pong_message = {
+                        "type": "pong",
                         "timestamp": datetime.now().isoformat()
                     }
+                    await manager.send_personal_message(json.dumps(pong_message), websocket)
                     
-                    
-                    await manager.send_personal_message(json.dumps(response_message), websocket)
-                    manager.add_to_history(user_id, "assistant", agent_response)
-                    
-                except Exception as e:
-                    error_message = {
-                        "type": "message",
-                        "role": "assistant",
-                        "content": f"❌ Sorry, I encountered an error: {str(e)}. Please try again.",
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    await manager.send_personal_message(json.dumps(error_message), websocket)
-                    manager.add_to_history(user_id, "assistant", error_message["content"])
-            
-            elif message_data["type"] == "ping":
-                # Respond to ping with pong
-                pong_message = {
-                    "type": "pong",
+            except asyncio.TimeoutError:
+                # Send ping to check if client is still alive
+                ping_message = {
+                    "type": "ping",
                     "timestamp": datetime.now().isoformat()
                 }
-                await manager.send_personal_message(json.dumps(pong_message), websocket)
+                try:
+                    await manager.send_personal_message(json.dumps(ping_message), websocket)
+                except:
+                    print(f"⚠️ Client {user_id} appears to have disconnected")
+                    break
+                    
+            except json.JSONDecodeError as e:
+                print(f"❌ JSON decode error for user {user_id}: {e}")
+                continue
+                
+            except Exception as e:
+                print(f"❌ Message processing error for user {user_id}: {e}")
+                continue
                 
     except WebSocketDisconnect:
+        print(f"🔌 WebSocket disconnected for user: {user_id}")
         manager.disconnect(websocket, user_id)
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        print(f"❌ WebSocket endpoint error for user {user_id}: {e}")
         manager.disconnect(websocket, user_id)
 
 
-@app.get("/api/history/{user_id}")
+@router.get("/api/history/{user_id}")
 async def get_conversation_history(user_id: str):
     """Get conversation history for a user"""
     history = manager.get_history(user_id)
     return {"user_id": user_id, "history": history}
+
+
+# Include the router in the app
+app.include_router(router)
 
 

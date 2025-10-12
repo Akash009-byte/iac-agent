@@ -605,6 +605,9 @@
         let userId = 'user_' + Math.random().toString(36).substr(2, 9);
         let isTyping = false;
         let pingInterval = null;
+        let reconnectAttempts = 0;
+        let maxReconnectAttempts = 5;
+        let reconnectDelay = 1000; // Start with 1 second
 
         // Initialize connection
         window.addEventListener('load', function() {
@@ -627,6 +630,10 @@
                 console.log('Connected to Strands agent');
                 updateConnectionStatus('connected', 'Connected to agent');
                 enableInput();
+                
+                // Reset reconnect attempts on successful connection
+                reconnectAttempts = 0;
+                reconnectDelay = 1000;
                 
                 // Start ping interval to keep connection alive
                 pingInterval = setInterval(function() {
@@ -697,9 +704,25 @@
                 }
                 
                 if (event.code !== 1000) { // Not a normal closure
-                    addMessage('assistant', 'Connection lost. Please refresh the page to reconnect.');
+                    // Attempt to reconnect
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        updateConnectionStatus('connecting', `Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`);
+                        
+                        setTimeout(function() {
+                            console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})`);
+                            connectWebSocket();
+                        }, reconnectDelay);
+                        
+                        // Exponential backoff
+                        reconnectDelay = Math.min(reconnectDelay * 2, 10000); // Max 10 seconds
+                    } else {
+                        addMessage('assistant', 'Connection lost. Please refresh the page to reconnect.');
+                        disableInput();
+                    }
+                } else {
+                    disableInput();
                 }
-                disableInput();
             };
         }
 
