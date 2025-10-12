@@ -101,6 +101,7 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 - Region (MUST specify)
 - Instance Type (MUST specify)
 - Instance Name (MUST specify)
+- AMI/OS Image (optional - will use latest Amazon Linux if not specified)
 - Key Pair Name (optional - user must provide existing key pair)
 - Security Group IDs (optional - can create new ones)
 - Subnet ID (optional)
@@ -128,7 +129,15 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 - If user provides incomplete information, ask for the missing pieces
 - Confirm all collected information before proceeding
 - Use tools like get_available_regions() to help users make informed choices
+- Use get_latest_amazon_linux_ami() to help users select OS images
 - Use get_data_collection_status() to check what information is still needed
+
+**OS Image Selection Guidelines:**
+- Ask users if they want to specify a particular OS image/AMI
+- Offer to get the latest Amazon Linux AMI using get_latest_amazon_linux_ami tool
+- Allow users to specify custom AMI IDs if they have specific requirements
+- If no AMI is specified, use the latest Amazon Linux AMI as default
+- Explain that different AMIs support different operating systems (Amazon Linux, Ubuntu, Windows, etc.)
 
 
 **Example Conversation Flow for EC2:**
@@ -138,8 +147,10 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 4. [Wait for instance type response]
 5. "What would you like to name this instance?"
 6. [Wait for name response]
-7. "Perfect! Now let me create your EC2 instance with these settings: [summarize all collected data]"
-8. [Now call the tool with complete information]
+7. "Would you like to specify a particular OS image/AMI? I can get the latest Amazon Linux AMI for you, or you can specify a custom AMI ID. If you don't specify one, I'll use the latest Amazon Linux AMI by default."
+8. [Wait for OS/AMI response - use get_latest_amazon_linux_ami tool if needed, or proceed with default]
+9. "Perfect! Now let me create your EC2 instance with these settings: [summarize all collected data]"
+10. [Now call the tool with complete information]
 
 **Available Operations:**
 

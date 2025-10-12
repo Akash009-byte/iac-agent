@@ -27,7 +27,7 @@ def validate_required_params(params: Dict, required_fields: List[str]) -> Tuple[
     return True, ""
 
 
-def validate_ec2_creation_params(region: str, instance_type: str, instance_name: str) -> Tuple[bool, str]:
+def validate_ec2_creation_params(region: str, instance_type: str, instance_name: str, ami_id: str = None) -> Tuple[bool, str]:
     """Validate EC2 instance creation parameters"""
     required_fields = ['region', 'instance_type', 'instance_name']
     params = {
@@ -35,6 +35,7 @@ def validate_ec2_creation_params(region: str, instance_type: str, instance_name:
         'instance_type': instance_type,
         'instance_name': instance_name
     }
+    # ami_id is optional, so we don't include it in required validation
     return validate_required_params(params, required_fields)
 
 

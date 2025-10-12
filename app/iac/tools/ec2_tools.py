@@ -97,32 +97,38 @@ def create_ec2_instance(
     region: str,
     instance_type: str,
     instance_name: str,
+    ami_id: Optional[str] = None,
     key_name: Optional[str] = None,
     security_group_ids: Optional[str] = None,
     subnet_id: Optional[str] = None,
     user_data: Optional[str] = None
 ) -> str:
     """Create an EC2 instance with the specified parameters"""
-    # Validate required parameters
-    is_valid, error_msg = validate_ec2_creation_params(region, instance_type, instance_name)
+    # Validate required parameters (ami_id is now optional)
+    is_valid, error_msg = validate_ec2_creation_params(region, instance_type, instance_name, ami_id or "default")
     if not is_valid:
         return f"❌ {error_msg}. Please provide all required information before creating the instance."
     
     try:
         ec2 = get_aws_client("ec2", region)
         
-        # Get latest Amazon Linux AMI
-        ami_response = ec2.describe_images(
-            Owners=['amazon'],
-            Filters=[
-                {'Name': 'name', 'Values': ['amzn2-ami-hvm-*']},
-                {'Name': 'architecture', 'Values': ['x86_64']},
-                {'Name': 'state', 'Values': ['available']}
-            ]
-        )
-        
-        images = sorted(ami_response['Images'], key=lambda x: x['CreationDate'], reverse=True)
-        ami_id = images[0]['ImageId'] if images else "ami-0c55b159cbfafe1f0"
+        # Use provided AMI ID or get latest Amazon Linux AMI as default
+        if not ami_id:
+            # Get latest Amazon Linux AMI as default
+            ami_response = ec2.describe_images(
+                Owners=['amazon'],
+                Filters=[
+                    {'Name': 'name', 'Values': ['amzn2-ami-hvm-*']},
+                    {'Name': 'architecture', 'Values': ['x86_64']},
+                    {'Name': 'state', 'Values': ['available']}
+                ]
+            )
+            
+            images = sorted(ami_response['Images'], key=lambda x: x['CreationDate'], reverse=True)
+            ami_id = images[0]['ImageId'] if images else "ami-0c55b159cbfafe1f0"
+            print(f"🔍 Using default Amazon Linux AMI: {ami_id}")
+        else:
+            print(f"🔍 Using provided AMI: {ami_id}")
         
         # Prepare launch parameters
         launch_params = {
