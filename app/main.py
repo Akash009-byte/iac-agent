@@ -83,6 +83,9 @@ app.add_middleware(
 # Add WebSocket CORS middleware
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.staticfiles import StaticFiles
+# Mount static files
+app.mount("/static", StaticFiles(directory="webapp/static"), name="static")
 
 class WebSocketCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
