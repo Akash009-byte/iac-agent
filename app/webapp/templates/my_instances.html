@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Instances - EC2Forge</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --ec2forge-primary: #00bcd4;
+            --ec2forge-primary-dark: #0097a7;
+            --ec2forge-secondary: #282c34;
+            --ec2forge-accent: #37474f;
+            --ec2forge-text-primary: #ffffff;
+            --ec2forge-text-secondary: #b0bec5;
+            --ec2forge-background-dark: #1e2127;
+            --ec2forge-background-darker: #171a1f;
+            --ec2forge-border: #37474f;
+            --ec2forge-success: #4caf50;
+            --ec2forge-warning: #ff9800;
+            --ec2forge-error: #f44336;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--ec2forge-background-darker);
+            color: var(--ec2forge-text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* Header */
+        .header {
+            background: var(--ec2forge-background-darker);
+            border-bottom: 1px solid var(--ec2forge-border);
+            padding: 0 2rem;
+            height: 70px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--ec2forge-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: white;
+        }
+
+        .logo-text {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--ec2forge-text-primary);
+        }
+
+        .logo-subtitle {
+            font-size: 14px;
+            color: var(--ec2forge-text-secondary);
+            margin-left: 8px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-link {
+            color: var(--ec2forge-text-primary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: background 0.3s;
+            font-weight: 500;
+        }
+
+        .nav-link:hover {
+            background: var(--ec2forge-accent);
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            background: var(--ec2forge-accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--ec2forge-text-primary);
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            min-height: 100vh;
+            padding-top: 70px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: var(--ec2forge-background-darker);
+            border-right: 1px solid var(--ec2forge-border);
+            padding: 2rem 0;
+            position: fixed;
+            left: 0;
+            top: 70px;
+            bottom: 0;
+            overflow-y: auto;
+        }
+
+        .launch-button {
+            width: calc(100% - 2rem);
+            margin: 0 1rem 2rem 1rem;
+            background: var(--ec2forge-primary);
+            color: white;
+            border: none;
+            padding: 16px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s;
+            border-left: 4px solid var(--ec2forge-primary);
+        }
+
+        .launch-button:hover {
+            background: var(--ec2forge-primary-dark);
+            transform: translateY(-1px);
+        }
+
+        .sidebar-nav {
+            list-style: none;
+            padding: 0 1rem;
+        }
+
+        .sidebar-nav li {
+            margin-bottom: 8px;
+        }
+
+        .sidebar-nav a {
+            color: var(--ec2forge-text-primary);
+            text-decoration: none;
+            padding: 14px 16px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .sidebar-nav a:hover {
+            background: var(--ec2forge-accent);
+        }
+
+        .sidebar-nav a.active {
+            background: var(--ec2forge-primary);
+            color: white;
+        }
+
+        .sidebar-nav i {
+            width: 20px;
+            text-align: center;
+        }
+
+        /* Content Area */
+        .content {
+            flex: 1;
+            margin-left: 280px;
+            padding: 3rem;
+            background: var(--ec2forge-background-dark);
+        }
+
+        .page-header {
+            margin-bottom: 3rem;
+        }
+
+        .page-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--ec2forge-primary);
+        }
+
+        .page-subtitle {
+            font-size: 1.1rem;
+            color: var(--ec2forge-text-secondary);
+        }
+
+        .instances-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .instance-card {
+            background: var(--ec2forge-secondary);
+            border: 1px solid var(--ec2forge-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .instance-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--ec2forge-primary), var(--ec2forge-primary-dark));
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .instance-card:hover {
+            border-color: var(--ec2forge-primary);
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(0, 188, 212, 0.2);
+        }
+
+        .instance-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .instance-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .instance-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--ec2forge-text-primary);
+        }
+
+        .instance-status {
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-running {
+            background: rgba(76, 175, 80, 0.2);
+            color: var(--ec2forge-success);
+            border: 1px solid var(--ec2forge-success);
+        }
+
+        .status-stopped {
+            background: rgba(244, 67, 54, 0.2);
+            color: var(--ec2forge-error);
+            border: 1px solid var(--ec2forge-error);
+        }
+
+        .status-pending {
+            background: rgba(255, 152, 0, 0.2);
+            color: var(--ec2forge-warning);
+            border: 1px solid var(--ec2forge-warning);
+        }
+
+        .instance-details {
+            margin-bottom: 1rem;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .detail-label {
+            color: var(--ec2forge-text-secondary);
+            font-weight: 500;
+        }
+
+        .detail-value {
+            color: var(--ec2forge-text-primary);
+            font-weight: 600;
+        }
+
+        .instance-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 0.6rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+        }
+
+        .btn-primary {
+            background: var(--ec2forge-primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--ec2forge-primary-dark);
+        }
+
+        .btn-success {
+            background: var(--ec2forge-success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #388e3c;
+        }
+
+        .btn-danger {
+            background: var(--ec2forge-error);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+
+        .btn-secondary {
+            background: var(--ec2forge-accent);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #455a64;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--ec2forge-text-secondary);
+        }
+
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            color: var(--ec2forge-border);
+        }
+
+        .empty-state h3 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--ec2forge-text-primary);
+        }
+
+        .empty-state p {
+            font-size: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .create-instance-btn {
+            background: var(--ec2forge-primary);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .create-instance-btn:hover {
+            background: var(--ec2forge-primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 188, 212, 0.3);
+        }
+
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--ec2forge-secondary);
+            border: 1px solid var(--ec2forge-border);
+            padding: 1.5rem;
+            border-radius: 12px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            border-color: var(--ec2forge-primary);
+            transform: translateY(-2px);
+        }
+
+        .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--ec2forge-primary);
+            margin-bottom: 0.2rem;
+        }
+
+        .stat-label {
+            color: var(--ec2forge-text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 250px;
+            }
+            
+            .content {
+                margin-left: 250px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                position: relative;
+                top: auto;
+                height: auto;
+            }
+            
+            .content {
+                margin-left: 0;
+                padding: 2rem 1rem;
+            }
+            
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .instances-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--ec2forge-background-dark);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--ec2forge-border);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--ec2forge-primary);
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--ec2forge-background-darker);
+            padding: 2rem;
+            text-align: center;
+            border-top: 1px solid var(--ec2forge-border);
+            color: var(--ec2forge-text-secondary);
+            font-size: 14px;
+            margin-top: auto;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">
+                <i class="fas fa-cloud"></i>
+            </div>
+            <div>
+                <div class="logo-text">EC2Forge</div>
+                <div class="logo-subtitle">Instance Manager</div>
+            </div>
+        </div>
+        <nav class="nav-links">
+            <a href="/" class="nav-link">
+                <i class="fas fa-home"></i> Home
+            </a>
+            <a href="#" class="nav-link">Dashboard</a>
+            <a href="#" class="nav-link">About</a>
+            <a href="#" class="nav-link">Help</a>
+            <a href="#" class="nav-link">Sign Out</a>
+            <div class="user-avatar">
+                <i class="fas fa-user"></i>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <button class="launch-button" onclick="window.location.href='/webapp/'">
+                <i class="fas fa-rocket"></i>
+                Launch New Instance
+            </button>
+            <ul class="sidebar-nav">
+                <li><a href="/webapp/my-instances" class="active"><i class="fas fa-home"></i> My Instances</a></li>
+                <li><a href="#"><i class="fas fa-file-alt"></i> Instance Templates <i class="fas fa-chevron-right"></i></a></li>
+                <li><a href="#"><i class="fas fa-star"></i> Agent Activity Log</a></li>
+                <li><a href="#"><i class="fas fa-cog"></i> Settings <i class="fas fa-chevron-right"></i></a></li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="content">
+            <div class="page-header">
+                <h1 class="page-title">My Instances</h1>
+                <p class="page-subtitle">Manage and monitor your AWS EC2 instances</p>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="stats-cards">
+                <div class="stat-card">
+                    <div class="stat-icon" style="color: var(--ec2forge-success);">
+                        <i class="fas fa-play-circle"></i>
+                    </div>
+                    <div class="stat-number">3</div>
+                    <div class="stat-label">Running</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="color: var(--ec2forge-danger);">
+                        <i class="fas fa-stop-circle"></i>
+                    </div>
+                    <div class="stat-number">1</div>
+                    <div class="stat-label">Stopped</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="color: var(--ec2forge-warning);">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="stat-number">1</div>
+                    <div class="stat-label">Pending</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="color: var(--ec2forge-primary);">
+                        <i class="fas fa-server"></i>
+                    </div>
+                    <div class="stat-number">5</div>
+                    <div class="stat-label">Total</div>
+                </div>
+            </div>
+
+            <!-- Instances Grid -->
+            <div class="instances-grid">
+                <!-- Sample Instance 1 -->
+                <div class="instance-card">
+                    <div class="instance-header">
+                        <div class="instance-name">web-server-01</div>
+                        <div class="instance-status status-running">Running</div>
+                    </div>
+                    <div class="instance-details">
+                        <div class="detail-row">
+                            <span class="detail-label">Instance ID:</span>
+                            <span class="detail-value">i-1234567890abcdef0</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">t3.medium</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Region:</span>
+                            <span class="detail-value">us-west-2</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Public IP:</span>
+                            <span class="detail-value">54.123.45.67</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Private IP:</span>
+                            <span class="detail-value">10.0.1.100</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Launched:</span>
+                            <span class="detail-value">2024-01-15 10:30:00</span>
+                        </div>
+                    </div>
+                    <div class="instance-actions">
+                        <button class="action-btn btn-secondary">
+                            <i class="fas fa-stop"></i> Stop
+                        </button>
+                        <button class="action-btn btn-danger">
+                            <i class="fas fa-trash"></i> Terminate
+                        </button>
+                        <button class="action-btn btn-primary">
+                            <i class="fas fa-info"></i> Details
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sample Instance 2 -->
+                <div class="instance-card">
+                    <div class="instance-header">
+                        <div class="instance-name">database-server</div>
+                        <div class="instance-status status-running">Running</div>
+                    </div>
+                    <div class="instance-details">
+                        <div class="detail-row">
+                            <span class="detail-label">Instance ID:</span>
+                            <span class="detail-value">i-0987654321fedcba0</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">m5.large</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Region:</span>
+                            <span class="detail-value">us-west-2</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Public IP:</span>
+                            <span class="detail-value">54.123.45.68</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Private IP:</span>
+                            <span class="detail-value">10.0.1.101</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Launched:</span>
+                            <span class="detail-value">2024-01-14 14:20:00</span>
+                        </div>
+                    </div>
+                    <div class="instance-actions">
+                        <button class="action-btn btn-secondary">
+                            <i class="fas fa-stop"></i> Stop
+                        </button>
+                        <button class="action-btn btn-danger">
+                            <i class="fas fa-trash"></i> Terminate
+                        </button>
+                        <button class="action-btn btn-primary">
+                            <i class="fas fa-info"></i> Details
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sample Instance 3 -->
+                <div class="instance-card">
+                    <div class="instance-header">
+                        <div class="instance-name">dev-server</div>
+                        <div class="instance-status status-stopped">Stopped</div>
+                    </div>
+                    <div class="instance-details">
+                        <div class="detail-row">
+                            <span class="detail-label">Instance ID:</span>
+                            <span class="detail-value">i-abcdef1234567890</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">t2.micro</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Region:</span>
+                            <span class="detail-value">us-west-2</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Public IP:</span>
+                            <span class="detail-value">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Private IP:</span>
+                            <span class="detail-value">10.0.1.102</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Launched:</span>
+                            <span class="detail-value">2024-01-13 09:15:00</span>
+                        </div>
+                    </div>
+                    <div class="instance-actions">
+                        <button class="action-btn btn-success">
+                            <i class="fas fa-play"></i> Start
+                        </button>
+                        <button class="action-btn btn-danger">
+                            <i class="fas fa-trash"></i> Terminate
+                        </button>
+                        <button class="action-btn btn-primary">
+                            <i class="fas fa-info"></i> Details
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sample Instance 4 -->
+                <div class="instance-card">
+                    <div class="instance-header">
+                        <div class="instance-name">test-server</div>
+                        <div class="instance-status status-pending">Pending</div>
+                    </div>
+                    <div class="instance-details">
+                        <div class="detail-row">
+                            <span class="detail-label">Instance ID:</span>
+                            <span class="detail-value">i-1111222233334444</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">t3.small</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Region:</span>
+                            <span class="detail-value">us-west-2</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Public IP:</span>
+                            <span class="detail-value">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Private IP:</span>
+                            <span class="detail-value">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Launched:</span>
+                            <span class="detail-value">2024-01-16 16:45:00</span>
+                        </div>
+                    </div>
+                    <div class="instance-actions">
+                        <button class="action-btn btn-secondary" disabled>
+                            <i class="fas fa-clock"></i> Starting...
+                        </button>
+                        <button class="action-btn btn-danger">
+                            <i class="fas fa-trash"></i> Terminate
+                        </button>
+                        <button class="action-btn btn-primary">
+                            <i class="fas fa-info"></i> Details
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sample Instance 5 -->
+                <div class="instance-card">
+                    <div class="instance-header">
+                        <div class="instance-name">monitoring-server</div>
+                        <div class="instance-status status-running">Running</div>
+                    </div>
+                    <div class="instance-details">
+                        <div class="detail-row">
+                            <span class="detail-label">Instance ID:</span>
+                            <span class="detail-value">i-5555666677778888</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">t3.micro</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Region:</span>
+                            <span class="detail-value">us-west-2</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Public IP:</span>
+                            <span class="detail-value">54.123.45.69</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Private IP:</span>
+                            <span class="detail-value">10.0.1.103</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Launched:</span>
+                            <span class="detail-value">2024-01-12 11:00:00</span>
+                        </div>
+                    </div>
+                    <div class="instance-actions">
+                        <button class="action-btn btn-secondary">
+                            <i class="fas fa-stop"></i> Stop
+                        </button>
+                        <button class="action-btn btn-danger">
+                            <i class="fas fa-trash"></i> Terminate
+                        </button>
+                        <button class="action-btn btn-primary">
+                            <i class="fas fa-info"></i> Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State (hidden when instances exist) -->
+            <div class="empty-state" style="display: none;">
+                <i class="fas fa-server"></i>
+                <h3>No Instances Found</h3>
+                <p>You don't have any EC2 instances yet. Create your first instance to get started!</p>
+                <button class="create-instance-btn" onclick="window.location.href='/webapp/'">
+                    <i class="fas fa-plus"></i>
+                    Create Your First Instance
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        ©2024 EC2Forge, Powered by AWS Strands. Kansas City Hackathon.
+    </footer>
+
+    <script>
+        // Simple JavaScript for future functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('My Instances page loaded');
+            
+            // Add click handlers for action buttons
+            document.querySelectorAll('.action-btn').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const action = this.textContent.trim();
+                    console.log(`Action clicked: ${action}`);
+                    
+                    // TODO: Implement actual functionality
+                    alert(`Action "${action}" will be implemented soon!`);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

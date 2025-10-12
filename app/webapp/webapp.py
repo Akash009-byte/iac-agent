@@ -153,6 +153,12 @@ async def get_chat_page(request: Request):
     return templates.TemplateResponse("chat.html", {"request": request})
 
 
+@router.get("/my-instances", response_class=HTMLResponse)
+async def get_my_instances_page(request: Request):
+    """Serve the My Instances page"""
+    return templates.TemplateResponse("my_instances.html", {"request": request})
+
+
 @router.get("/health")
 async def health_check():
     """Health check endpoint"""
