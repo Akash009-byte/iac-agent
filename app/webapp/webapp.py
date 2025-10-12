@@ -5,7 +5,7 @@ A chatbot interface for AWS EC2 instance management
 """
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
-from fastapi.responses import HTMLResponse, Response, FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import json
@@ -13,9 +13,6 @@ import asyncio
 import os
 from datetime import datetime
 from typing import Dict, List
-import uuid
-import base64
-import tempfile
 
 # Import our interactive agent wrapper
 from .agent_wrapper import interactive_agent
@@ -39,7 +36,7 @@ class ConnectionManager:
         self.user_sessions[user_id] = {
             "websocket": websocket,
             "conversation_history": [],
-            "created_at": datetime.now()
+            "created_at": datetime.now(),
         }
 
     def disconnect(self, websocket: WebSocket, user_id: str):
@@ -122,40 +119,8 @@ async def get_active_sessions():
     return {"active_sessions": len(sessions), "sessions": sessions}
 
 
-@app.get("/api/download-file/{file_name}")
-async def download_file(file_name: str):
-    """Download the SSH private key file"""
-    ssh_dir = os.path.join(os.path.dirname(__file__), "..", "ssh")
-    file_path = os.path.join(ssh_dir, file_name)
-    
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    # Return the file as a download
-    return FileResponse(
-        path=file_path,
-        filename=file_name,
-        media_type="application/x-pem-file",
-        headers={
-            "Content-Disposition": f"attachment; filename={file_name}"
-        }
-    )
 
 
-@app.get("/api/key-info/{key_id}")
-async def get_key_info(key_id: str):
-    """Get information about a temporary SSH key"""
-    key_data = manager.get_temporary_key(key_id)
-    
-    if not key_data:
-        raise HTTPException(status_code=404, detail="Key not found or expired")
-    
-    return {
-        "key_name": key_data["key_name"],
-        "region": key_data["region"],
-        "created_at": key_data["created_at"].isoformat(),
-        "download_url": f"/api/download-key/{key_id}"
-    }
 
 
 @app.websocket("/ws/{user_id}")
@@ -211,60 +176,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         lambda: interactive_agent(user_message)
                     )
                     
-                    # Check if create_key_pair tool was called in the original response
-                    download_info = None
-                    
-                    # Check if the original response contains create_key_pair tool call
-                    original_response_str = str(original_response)
-                    # Also check if the cleaned response contains the private key removal marker
-                    if "create_key_pair" in original_response_str.lower() or "[PRIVATE KEY REMOVED FOR SECURITY]" in agent_response:
-                        print(f"🔍 create_key_pair tool detected in original response or private key removal marker found")
-                        
-                        # Extract key information from the response
-                        try:
-                            import re
-                            
-                            # Extract key name from the response (look for various patterns)
-                            key_name_patterns = [
-                                r'Key Name:\s*([^\n]+)',
-                                r'key pair named?\s*[\'"]?([^\s\'"\n]+)',
-                                r'key pair\s+[\'"]?([^\s\'"\n]+)',
-                                r'SSH key\s+[\'"]?([^\s\'"\n]+)',
-                                r'private key\s+[\'"]?([^\s\'"\n]+)'
-                            ]
-                            
-                            key_name = "ssh-key"
-                            for pattern in key_name_patterns:
-                                match = re.search(pattern, agent_response, re.IGNORECASE)
-                                if match:
-                                    key_name = match.group(1).strip()
-                                    break
-                            
-                            # Check if the key file exists (saved by agent wrapper)
-                            ssh_dir = os.path.join(os.path.dirname(__file__), "..", "ssh")
-                            key_file_path = os.path.join(ssh_dir, f"{key_name}.pem")
-                            
-                            if os.path.exists(key_file_path):
-                                print(f"✅ SSH key file exists: {key_file_path}")
-                                
-                                # Create download info
-                                download_info = {
-                                    "key_name": key_name,
-                                    "file_name": f"{key_name}.pem",
-                                    "download_url": f"/api/download-file/{key_name}.pem",
-                                    "instructions": f"Your SSH key '{key_name}' is ready for download. Click the download button below to save it securely."
-                                }
-                                
-                                print(f"✅ Download info created: {download_info}")
-                            else:
-                                print(f"❌ SSH key file not found: {key_file_path}")
-                                download_info = None
-                        except Exception as e:
-                            print(f"❌ Error during key extraction/storage: {e}")
-                            import traceback
-                            traceback.print_exc()
-                    else:
-                        print(f"🔍 No create_key_pair tool detected - skipping download button check")
                     
                     # Send agent response
                     response_message = {
@@ -274,12 +185,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         "timestamp": datetime.now().isoformat()
                     }
                     
-                    # Add download info if available
-                    if download_info:
-                        response_message["download_info"] = download_info
-                        print(f"✅ Added download_info to WebSocket message: {download_info}")
-                    else:
-                        print(f"❌ No download_info to add to WebSocket message")
                     
                     await manager.send_personal_message(json.dumps(response_message), websocket)
                     manager.add_to_history(user_id, "assistant", agent_response)

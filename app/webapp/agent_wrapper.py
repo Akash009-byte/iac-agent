@@ -54,67 +54,6 @@ def interactive_agent(message: str) -> str:
                 # Use tool outputs as the primary response
                 response_text = '\n\n'.join(tool_outputs)
                 
-                # Check if this is a key pair creation response and clean it up
-                if "-----BEGIN RSA PRIVATE KEY-----" in response_text and "created successfully" in response_text.lower():
-                    # Extract key information without showing the private key
-                    import re
-                    
-                    key_name_match = re.search(r'Key Name:\s*([^\n]+)', response_text)
-                    key_pair_id_match = re.search(r'Key Pair ID:\s*([^\n]+)', response_text)
-                    region_match = re.search(r'Region:\s*([^\n]+)', response_text)
-                    
-                    key_name = key_name_match.group(1).strip() if key_name_match else "ssh-key"
-                    key_pair_id = key_pair_id_match.group(1).strip() if key_pair_id_match else "unknown"
-                    region = region_match.group(1).strip() if region_match else "us-east-1"
-                    
-                    # Extract private key for webapp to save
-                    private_key_patterns = [
-                        r'```\n(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)\n```',
-                        r'```(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)```',
-                        r'(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)',
-                        r'PRIVATE KEY.*?\n(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)'
-                    ]
-                    
-                    private_key = None
-                    for pattern in private_key_patterns:
-                        match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
-                        if match:
-                            private_key = match.group(1).strip()
-                            break
-                    
-                    # Save the private key to file if extracted
-                    if private_key:
-                        import os
-                        ssh_dir = os.path.join(os.path.dirname(__file__), "..", "ssh")
-                        os.makedirs(ssh_dir, exist_ok=True)
-                        
-                        key_file_path = os.path.join(ssh_dir, f"{key_name}.pem")
-                        
-                        try:
-                            with open(key_file_path, 'w') as f:
-                                f.write(private_key)
-                            
-                            # Set proper permissions (chmod 400)
-                            os.chmod(key_file_path, 0o400)
-                            
-                            print(f"✅ SSH key saved to: {key_file_path}")
-                        except Exception as e:
-                            print(f"❌ Error saving SSH key: {e}")
-                    
-                    # Remove private key content but preserve the rest of the response
-                    # Find the private key section and remove it
-                    private_key_patterns = [
-                        r'```\n(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)\n```',
-                        r'```(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)```',
-                        r'(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)',
-                        r'PRIVATE KEY.*?\n(-----BEGIN RSA PRIVATE KEY-----.*?-----END RSA PRIVATE KEY-----)'
-                    ]
-                    
-                    cleaned_response = response_text
-                    for pattern in private_key_patterns:
-                        cleaned_response = re.sub(pattern, '[PRIVATE KEY REMOVED FOR SECURITY]', cleaned_response, flags=re.DOTALL | re.IGNORECASE)
-                    
-                    response_text = cleaned_response
         
         # Method 2: Check if result has messages (fallback)
         if not response_text and hasattr(result, 'messages') and result.messages:

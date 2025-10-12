@@ -328,3 +328,36 @@ Instance Details:
         
     except Exception as e:
         return f"❌ Error starting EC2 instance: {str(e)}"
+
+
+@tool
+def reboot_ec2_instance(region: str, instance_id: str) -> str:
+    """Reboot an EC2 instance"""
+    try:
+        ec2 = get_aws_client("ec2", region)
+        
+        # Get instance details before reboot
+        response = ec2.describe_instances(InstanceIds=[instance_id])
+        instance = response['Reservations'][0]['Instances'][0]
+        instance_name = "N/A"
+        if 'Tags' in instance:
+            for tag in instance['Tags']:
+                if tag['Key'] == 'Name':
+                    instance_name = tag['Value']
+                    break
+        
+        # Reboot the instance
+        ec2.reboot_instances(InstanceIds=[instance_id])
+        
+        return f"""✅ EC2 instance rebooted successfully!
+
+Instance Details:
+- Instance ID: {instance_id}
+- Name: {instance_name}
+- Region: {region}
+
+Note: The instance will restart and may be briefly unavailable during the reboot process.
+"""
+        
+    except Exception as e:
+        return f"❌ Error rebooting EC2 instance: {str(e)}"

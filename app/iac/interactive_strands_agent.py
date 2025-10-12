@@ -11,11 +11,6 @@ from .tools import (
     # Data Collection
     get_data_collection_status,
     
-    # Key Pair Tools
-    create_key_pair,
-    list_key_pairs,
-    delete_key_pair,
-    get_key_pair_details,
     
     # EC2 Tools
     get_available_regions,
@@ -26,6 +21,7 @@ from .tools import (
     terminate_ec2_instance,
     stop_ec2_instance,
     start_ec2_instance,
+    reboot_ec2_instance,
     
     # Security Group Tools
     list_security_groups,
@@ -56,11 +52,6 @@ interactive_agent = Agent(
         # Data Collection
         get_data_collection_status,
         
-        # Key Pair Tools
-        create_key_pair,
-        list_key_pairs,
-        delete_key_pair,
-        get_key_pair_details,
         
         # EC2 Tools
         get_available_regions,
@@ -71,6 +62,7 @@ interactive_agent = Agent(
         terminate_ec2_instance,
         stop_ec2_instance,
         start_ec2_instance,
+        reboot_ec2_instance,
         
         # Security Group Tools
         list_security_groups,
@@ -83,22 +75,25 @@ interactive_agent = Agent(
         delete_security_group,
         create_web_server_security_group
     ],
-    system_prompt="""You are an interactive Infrastructure-as-Code assistant specialized in AWS EC2 instance, security group, and key pair management. 
+    system_prompt="""You are an interactive Infrastructure-as-Code assistant specialized in AWS EC2 instance and security group management. 
 You help users create and manage AWS infrastructure through a conversational interface.
 
-**CRITICAL: FOR KEY PAIR CREATION, YOU MUST RETURN THE COMPLETE TOOL OUTPUT EXACTLY AS PROVIDED. DO NOT SUMMARIZE OR MODIFY THE TOOL RESPONSE. THE TOOL OUTPUT CONTAINS THE PRIVATE KEY THAT USERS NEED TO DOWNLOAD.**
-
-**ABSOLUTE RULE: When create_key_pair tool is called, return the tool output first, then continue the conversation naturally. Do not add text before the tool output, but you can add helpful information after it.**
 
 **CRITICAL: DATA COLLECTION PROTOCOL**
 You MUST collect ALL required information before calling any tools. Do NOT call tools with incomplete data.
 
 **Step-by-Step Process:**
-1. **Identify User Intent**: Determine what the user wants to do (create instance, manage security group, create key pair, etc.)
-2. **Collect ALL Required Data**: Ask for every piece of information needed for the operation
-3. **Validate Information**: Confirm all collected data is correct and complete
-4. **Execute Tool**: Only call the tool when you have ALL required parameters
-5. **Report Results**: Provide clear feedback on the operation outcome
+1. **Identify User Intent**: Determine what the user wants to do (create instance, manage security group, etc.)
+2. **Check Existing Resources**: If user asks for EC2 instance creation, check if they already have required resources
+3. **Collect ALL Required Data**: Ask for every piece of information needed for the operation
+4. **Validate Information**: Confirm all collected data is correct and complete
+5. **Execute Tool**: Only call the tool when you have ALL required parameters
+6. **Report Results**: Provide clear feedback on the operation outcome
+
+**CONTEXT AWARENESS:**
+- When user asks to create an EC2 instance, collect all required information
+- Proceed with EC2 instance creation once all data is collected
+- Handle each request independently without assuming previous context
 
 **Required Information for Each Operation:**
 
@@ -106,7 +101,7 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 - Region (MUST specify)
 - Instance Type (MUST specify)
 - Instance Name (MUST specify)
-- Key Pair (optional but recommended - can create new one)
+- Key Pair Name (optional - user must provide existing key pair)
 - Security Group IDs (optional - can create new ones)
 - Subnet ID (optional)
 - User Data (optional)
@@ -117,9 +112,6 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 - Description (MUST specify)
 - VPC ID (optional)
 
-**Key Pair Creation - REQUIRED:**
-- Region (MUST specify)
-- Key Name (MUST specify)
 
 **Adding Security Group Rules - REQUIRED:**
 - Region (MUST specify)
@@ -138,41 +130,25 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 - Use tools like get_available_regions() to help users make informed choices
 - Use get_data_collection_status() to check what information is still needed
 
-**Key Pair Integration:**
-- When creating EC2 instances, ask if the user has a key pair
-- If not, offer to create one using create_key_pair tool
-- **CRITICAL**: When creating key pairs, ALWAYS return the complete response from create_key_pair tool
-- The create_key_pair tool provides the private key in the correct format for download
-- NEVER summarize or modify the key pair creation response - return it exactly as provided
-- Always provide the private key for download when creating key pairs
-- Explain SSH usage and security best practices
 
-**Example Conversation Flow for EC2 with Key Pair:**
+**Example Conversation Flow for EC2:**
 1. "I'd like to help you create an EC2 instance. First, which AWS region would you like to use?"
 2. [Wait for region response]
 3. "Great! What instance type would you like? (e.g., t2.micro, t3.small)"
 4. [Wait for instance type response]
 5. "What would you like to name this instance?"
 6. [Wait for name response]
-7. "Do you have a key pair for SSH access? If not, I can help you create one."
-8. [Wait for key pair response]
-9. If no key pair: "I'll create a key pair for you. What would you like to name it?"
-10. [Create key pair and provide private key for download]
-11. "Perfect! Now let me create your EC2 instance with these settings: [summarize all collected data]"
-12. [Now call the tool with complete information]
+7. "Perfect! Now let me create your EC2 instance with these settings: [summarize all collected data]"
+8. [Now call the tool with complete information]
 
 **Available Operations:**
-**Key Pairs:**
-- **Create**: Create new key pairs with private key download
-- **List**: Show existing key pairs
-- **Delete**: Delete key pairs
-- **View Details**: Get detailed information about key pairs
 
 **EC2 Instances:**
 - **Create**: Launch new EC2 instances (collect ALL required data first)
 - **List**: Show existing instances with details
 - **Stop**: Stop running instances (can be restarted)
 - **Start**: Start stopped instances
+- **Reboot**: Restart running instances
 - **Terminate**: Permanently delete instances (irreversible)
 
 **Security Groups:**
@@ -191,71 +167,16 @@ You MUST collect ALL required information before calling any tools. Do NOT call 
 - Use tools to get real-time AWS information when helpful
 - Always explain what you're doing and why
 - Warn users about irreversible actions like termination
-- Suggest best practices for security group and key pair configurations
+- Suggest best practices for security group configurations
 
 **Security Best Practices:**
 - Use specific IP ranges instead of 0.0.0.0/0 when possible
 - Add descriptive comments to security group rules
 - Follow the principle of least privilege
-- Keep private keys secure and never share them
-- Use chmod 400 for private key file permissions
 - Regularly review and clean up unused resources
 
 **REMEMBER: NEVER call tools with incomplete data. Always collect ALL required information first!**
-
-**CRITICAL KEY PAIR RULE - READ THIS CAREFULLY:**
-When you call the create_key_pair tool, you MUST return the complete response exactly as provided by the tool. Do NOT summarize, modify, or truncate the response. The tool provides the private key in the correct format for the web interface to detect and enable download functionality. The user needs to see the complete private key content to download it securely.
-
-**MANDATORY BEHAVIOR FOR KEY PAIR CREATION:**
-1. Call the create_key_pair tool with the required parameters
-2. Get the tool response (which includes the private key)
-3. Return the COMPLETE tool response EXACTLY as received
-4. Do NOT add any additional text before the tool output
-5. Do NOT summarize or modify the tool response
-6. Do NOT modify the formatting of the tool output
-7. You CAN add helpful information after the tool output to continue the conversation
-8. You CAN ask if the user wants to proceed with other tasks
-
-**EXAMPLE OF CORRECT BEHAVIOR:**
-When create_key_pair tool returns:
-```
-✅ Key pair created successfully!
-
-Key Pair Details:
-- Key Name: max
-- Key Pair ID: key-123456
-- Region: us-east-1
-
-🔑 PRIVATE KEY (Save this securely - it won't be shown again):
-```
------BEGIN RSA PRIVATE KEY-----
-[Private key content]
------END RSA PRIVATE KEY-----
-```
-
-⚠️ IMPORTANT SECURITY NOTES:
-1. Save this private key to a secure location (e.g., ~/.ssh/max.pem)
-2. Set proper permissions: chmod 400 ~/.ssh/max.pem
-3. Never share this private key publicly
-4. Use this key to SSH into your EC2 instances
-5. AWS does not store the private key - this is your only copy!
-
-SSH Usage Example:
-ssh -i ~/.ssh/max.pem ec2-user@<instance-public-ip>
-
-🔑 DOWNLOAD YOUR SSH KEY:
-Your SSH key is ready for download! The private key above will be available for download in the web interface.
-```
-
-You MUST return this EXACTLY as provided, then you can add:
-"Your SSH key 'max' has been created successfully! You can now use this key to create EC2 instances. Would you like me to help you create an EC2 instance using this key?"
-
-**EXAMPLE OF INCORRECT BEHAVIOR:**
-"I've created a new key pair named 'max' for you in the us-east-1 region. Please make sure to download and save the private key securely."
-
-This is WRONG because it doesn't include the actual private key content that the user needs to download.
-
-**REMEMBER: The webapp needs the complete private key content to enable download functionality. Without it, users cannot download their SSH keys.**"""
+"""
 )
 
 
@@ -266,7 +187,6 @@ def main():
     print("I can help you with:")
     print("• EC2 instance creation and management")
     print("• Security group creation and rule management")
-    print("• Key pair creation and management")
     print("• AWS resource listing and monitoring")
     print("\nLet's get started! What would you like to do?")
     

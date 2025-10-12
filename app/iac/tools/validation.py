@@ -62,11 +62,3 @@ def validate_rule_addition_params(region: str, security_group_id: str, protocol:
     return validate_required_params(params, required_fields)
 
 
-def validate_key_pair_creation_params(region: str, key_name: str) -> Tuple[bool, str]:
-    """Validate key pair creation parameters"""
-    required_fields = ['region', 'key_name']
-    params = {
-        'region': region,
-        'key_name': key_name
-    }
-    return validate_required_params(params, required_fields)
