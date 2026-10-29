@@ -16,16 +16,19 @@ PyObjectId = Annotated[str, BeforeValidator(str)]
 
 def get_database():
     """Return the connected database."""
+    if database is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail="Database is unavailable")
     return database
 
 async def run_migrations():
     """Run database migrations using mongo-migrate."""
     try:
         # Set up the migration configuration
-        MONGO_HOST = os.getenv("MONGO_HOST")
-        MONGO_PORT = int(os.getenv("MONGO_PORT"))
-        MONGO_DB = os.getenv("MONGO_DB")
-        MIGRATIONS_DIR = os.getenv("MIGRATIONS_DIR")
+        MONGO_HOST = os.getenv("MONGO_HOST", "127.0.0.1")
+        MONGO_PORT = int(os.getenv("MONGO_PORT", "27017"))
+        MONGO_DB = os.getenv("MONGO_DB", "agentops")
+        MIGRATIONS_DIR = os.getenv("MIGRATIONS_DIR", str(__import__("pathlib").Path(__file__).resolve().parents[1] / "migrations"))
 
         # Create the configuration object using SimpleNamespace
         config = SimpleNamespace(
@@ -37,7 +40,7 @@ async def run_migrations():
         # Initialize MigrationManager with config and migrations path
         logger.info("Running database migrations...")
         migration_manager = MigrationManager(config=config, migrations_path=MIGRATIONS_DIR)
-        
+
         # If any new migration files are added, Below given target_migration has to updated before running the app.
         migration_manager.migrate('upgrade', target_migration='20241103094310')
         logger.info("Migrations applied successfully.")
@@ -47,38 +50,21 @@ async def run_migrations():
         raise
 
 async def connect_mongodb():
-    """Attempt to connect to MongoDB and set the global client and database."""
     global client, database
+    host = os.getenv("MONGO_HOST", "127.0.0.1")
+    port = os.getenv("MONGO_PORT", "27017")
+    url = os.getenv("MONGO_URL") or f"mongodb://{host}:{port}"
+    name = os.getenv("MONGO_DB", "agentops")
+    client = motor.motor_asyncio.AsyncIOMotorClient(url, serverSelectionTimeoutMS=5000)
+    database = client[name]
     try:
-        # Try to get full MongoDB URL first (for Atlas)
-        mongo_db_url = os.getenv('MONGO_URL')
-        mongo_db_name = os.getenv('MONGO_DB')
-        
-        # Fallback to constructing URL from host/port (for local MongoDB)
-        if not mongo_db_url:
-            mongo_db_host = os.getenv('MONGO_HOST', 'localhost')
-            mongo_db_port = os.getenv('MONGO_PORT', '27017')
-            mongo_db_url = f"mongodb://{mongo_db_host}:{mongo_db_port}"
-
-        if not mongo_db_url:
-            raise ValueError("MONGO_URL or MONGO_HOST/MONGO_PORT is not set")
-
-        # Initialize the MongoDB client with SSL configuration for Atlas
-        import ssl
-        client = motor.motor_asyncio.AsyncIOMotorClient(
-            mongo_db_url,
-            tls=True,
-            tlsAllowInvalidCertificates=True,
-            tlsAllowInvalidHostnames=True
-        )
-        database = client[mongo_db_name]
-
-        # Verify the connection by listing collections or similar operation
-        await client.server_info()
-        logger.info(f"Database connected successfully! URL: {mongo_db_url[:50]}...")
-    except Exception as e:
-        logger.error(f"Error connecting to database: {e}")
-        raise
+        await database.command("ping")
+    except Exception:
+        client.close()
+        client = None
+        database = None
+        raise RuntimeError("MongoDB is unavailable. Start MongoDB or configure MONGO_URL.") from None
+    logger.info("MongoDB connected successfully")
 
 async def disconnect_mongodb():
     """Disconnect from MongoDB."""
@@ -88,4 +74,3 @@ async def disconnect_mongodb():
         logger.info("Database disconnected successfully!")
     else:
         logger.info("Database not connected.")
-        

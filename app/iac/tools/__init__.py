@@ -50,8 +50,8 @@ __all__ = [
     'validate_ec2_creation_params',
     'validate_security_group_creation_params',
     'validate_rule_addition_params',
-    
-    
+
+
     # EC2 Tools
     'get_available_regions',
     'get_instance_type_info',
@@ -62,7 +62,7 @@ __all__ = [
     'stop_ec2_instance',
     'start_ec2_instance',
     'reboot_ec2_instance',
-    
+
     # Security Group Tools
     'list_security_groups',
     'create_security_group',
@@ -74,10 +74,10 @@ __all__ = [
     'delete_security_group',
     'create_web_server_security_group',
     'get_current_ip_address',
-    
+
     # Data Collection
     'get_data_collection_status',
-    
+
     # Pricing Tools
     'get_ec2_pricing',
     'compare_ec2_pricing'

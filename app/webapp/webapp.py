@@ -84,7 +84,7 @@ class ConnectionManager:
         if user_id in self.user_sessions:
             return self.user_sessions[user_id]["conversation_history"]
         return []
-    
+
     def store_temporary_key(self, key_id: str, key_name: str, private_key: str, region: str):
         """Store a temporary SSH key for download"""
         self.temporary_keys[key_id] = {
@@ -94,7 +94,7 @@ class ConnectionManager:
             "created_at": datetime.now(),
             "expires_at": datetime.now().timestamp() + 3600  # Expires in 1 hour
         }
-    
+
     def get_temporary_key(self, key_id: str) -> Dict:
         """Get a temporary SSH key"""
         if key_id in self.temporary_keys:
@@ -105,7 +105,7 @@ class ConnectionManager:
                 return None
             return key_data
         return None
-    
+
     def remove_temporary_key(self, key_id: str):
         """Remove a temporary SSH key"""
         if key_id in self.temporary_keys:
@@ -121,13 +121,13 @@ async def cleanup_stale_connections():
         try:
             current_time = datetime.now()
             stale_users = []
-            
+
             for user_id, session in manager.user_sessions.items():
                 if "last_ping" in session:
                     time_diff = current_time - session["last_ping"]
                     if time_diff.total_seconds() > 300:  # 5 minutes timeout
                         stale_users.append(user_id)
-            
+
             for user_id in stale_users:
                 print(f"🧹 Cleaning up stale connection for user: {user_id}")
                 if user_id in manager.user_sessions:
@@ -135,10 +135,10 @@ async def cleanup_stale_connections():
                     if "websocket" in session:
                         websocket = session["websocket"]
                         manager.disconnect(websocket, user_id)
-                        
+
         except Exception as e:
             print(f"❌ Error in cleanup task: {e}")
-        
+
         await asyncio.sleep(60)  # Run cleanup every minute
 
 # Start cleanup task when app starts
@@ -150,13 +150,13 @@ async def startup_event():
 @router.get("/", response_class=HTMLResponse)
 async def get_chat_page(request: Request):
     """Serve the main chat page"""
-    return templates.TemplateResponse("chat.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="chat.html", context={})
 
 
 @router.get("/my-instances", response_class=HTMLResponse)
 async def get_my_instances_page(request: Request):
     """Serve the My Instances page"""
-    return templates.TemplateResponse("my_instances.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="my_instances.html", context={})
 
 
 @router.get("/health")
@@ -182,7 +182,7 @@ async def get_active_sessions():
 async def get_activity_log_page(request: Request):
     """Serve the activity log page"""
     print("Serving activity log page")
-    return templates.TemplateResponse("activity_log.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="activity_log.html", context={})
 
 
 
@@ -191,7 +191,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     """WebSocket endpoint for chat communication"""
     try:
         await manager.connect(websocket, user_id)
-        
+
         # Send welcome message
         welcome_message = {
             "type": "message",
@@ -199,10 +199,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             "content": "🤖 Hello! I'm your AWS EC2 management assistant. I can help you create, manage, and monitor EC2 instances. What would you like to do today?",
             "timestamp": datetime.now().isoformat()
         }
-        
+
         await manager.send_personal_message(json.dumps(welcome_message), websocket)
         manager.add_to_history(user_id, "assistant", welcome_message["content"])
-        
+
         # Main message loop with improved error handling
         while True:
             try:
@@ -210,39 +210,39 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 if websocket.client_state != websocket.client_state.CONNECTED:
                     print(f"⚠️ WebSocket disconnected for user {user_id}")
                     break
-                
+
                 # Receive message from client with timeout
                 data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
                 message_data = json.loads(data)
-                
+
                 # Update last ping time
                 if user_id in manager.user_sessions:
                     manager.user_sessions[user_id]["last_ping"] = datetime.now()
-                
+
                 if message_data["type"] == "message":
                     user_message = message_data["content"]
-                    
+
                     # Add user message to history
                     manager.add_to_history(user_id, "user", user_message)
-                    
+
                     # Send typing indicator
                     typing_message = {
                         "type": "typing",
                         "role": "assistant"
                     }
                     await manager.send_personal_message(json.dumps(typing_message), websocket)
-                    
+
                     try:
                         # Get response from the interactive agent wrapper
                         # Run the agent in a thread to avoid blocking
                         loop = asyncio.get_event_loop()
-                        
+
                         # Get the cleaned response from wrapper
                         agent_response = await loop.run_in_executor(
-                            None, 
+                            None,
                             lambda: interactive_agent(user_message, user_id, user_id)
                         )
-                        
+
                         # Send agent response
                         response_message = {
                             "type": "message",
@@ -250,10 +250,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             "content": agent_response,
                             "timestamp": datetime.now().isoformat()
                         }
-                        
+
                         await manager.send_personal_message(json.dumps(response_message), websocket)
                         manager.add_to_history(user_id, "assistant", agent_response)
-                        
+
                     except Exception as e:
                         print(f"❌ Agent error for user {user_id}: {e}")
                         error_message = {
@@ -264,7 +264,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         }
                         await manager.send_personal_message(json.dumps(error_message), websocket)
                         manager.add_to_history(user_id, "assistant", error_message["content"])
-                
+
                 elif message_data["type"] == "ping":
                     # Respond to ping with pong
                     pong_message = {
@@ -272,7 +272,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         "timestamp": datetime.now().isoformat()
                     }
                     await manager.send_personal_message(json.dumps(pong_message), websocket)
-                    
+
             except asyncio.TimeoutError:
                 # Send ping to check if client is still alive
                 ping_message = {
@@ -284,15 +284,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 except:
                     print(f"⚠️ Client {user_id} appears to have disconnected")
                     break
-                    
+
             except json.JSONDecodeError as e:
                 print(f"❌ JSON decode error for user {user_id}: {e}")
                 continue
-                
+
             except Exception as e:
                 print(f"❌ Message processing error for user {user_id}: {e}")
                 continue
-                
+
     except WebSocketDisconnect:
         print(f"🔌 WebSocket disconnected for user: {user_id}")
         manager.disconnect(websocket, user_id)
@@ -310,5 +310,3 @@ async def get_conversation_history(user_id: str):
 
 # Include the router in the app
 app.include_router(router)
-
-

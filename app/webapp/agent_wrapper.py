@@ -11,27 +11,32 @@ from pathlib import Path
 
 # Add parent directory to path to import from iac
 sys.path.append(str(Path(__file__).parent.parent))
-from iac.interactive_strands_agent import interactive_agent as _interactive_agent
+import os
+_interactive_agent = None
+if os.getenv("OPENAI_API_KEY"):
+    from iac.interactive_strands_agent import interactive_agent as _interactive_agent
 from core.activity_logger import activity_logger
 
 
 def interactive_agent(message: str, session_id: str = None, user_id: str = "demo_user") -> str:
     """
     Wrapper function that extracts text content from Strands AgentResult and logs activity
-    
+
     Args:
         message: User message to send to the agent
         session_id: Session ID for tracking
         user_id: User ID for tracking
-    
+
     Returns:
         String response from the agent
     """
+    if _interactive_agent is None:
+        return "AI chat is unavailable. Configure OPENAI_API_KEY on the server to enable it."
     if not session_id:
         session_id = f"session_{uuid.uuid4().hex[:8]}"
-    
+
     start_time = time.time()
-    
+
     # Log the query start
     activity_logger.log_operation_start(
         tool_name="strands_agent",
@@ -48,20 +53,20 @@ def interactive_agent(message: str, session_id: str = None, user_id: str = "demo
             "model": "gpt-4o"
         }
     )
-    
+
     try:
         # Get the agent result
         result = _interactive_agent(message)
-        
+
         # Extract text content from AgentResult
         response_text = None
-        
+
         # Method 1: Check if result has messages (primary method)
         if hasattr(result, 'messages') and result.messages:
             # Collect all assistant messages and tool outputs
             all_responses = []
             tool_outputs = []
-            
+
             for message_obj in result.messages:
                 if hasattr(message_obj, 'role'):
                     if message_obj.role == 'assistant':
@@ -88,19 +93,19 @@ def interactive_agent(message: str, session_id: str = None, user_id: str = "demo
                                 tool_outputs.append(str(message_obj.content))
                         elif hasattr(message_obj, 'text'):
                             tool_outputs.append(message_obj.text)
-            
+
             # Prioritize assistant responses, then add tool outputs
             if all_responses:
                 response_text = '\n\n'.join(all_responses)
                 print(f"🔍 Agent wrapper: Found {len(all_responses)} assistant responses")
                 print(f"🔍 Agent wrapper: Assistant response preview: {response_text[:200]}...")
-                
+
                 # Add tool outputs if they exist and are different from assistant response
                 if tool_outputs:
                     tool_text = '\n\n'.join(tool_outputs)
                     print(f"🔍 Agent wrapper: Found {len(tool_outputs)} tool outputs")
                     print(f"🔍 Agent wrapper: Tool output preview: {tool_text[:200]}...")
-                    
+
                     # Only add tool output if it's different from the assistant response
                     if tool_text not in response_text:
                         response_text += '\n\n' + tool_text
@@ -111,8 +116,8 @@ def interactive_agent(message: str, session_id: str = None, user_id: str = "demo
                 # Fallback to tool outputs if no assistant response
                 response_text = '\n\n'.join(tool_outputs)
                 print(f"🔍 Agent wrapper: No assistant response, using {len(tool_outputs)} tool outputs")
-                
-        
+
+
         # Method 2: Direct attributes
         if not response_text:
             if hasattr(result, 'content'):
@@ -123,19 +128,19 @@ def interactive_agent(message: str, session_id: str = None, user_id: str = "demo
                 response_text = str(result.response)
             elif hasattr(result, 'output'):
                 response_text = str(result.output)
-        
+
         # Method 3: String conversion fallback
         if not response_text:
             response_text = str(result)
-        
+
         # Ensure we have a valid response
         if not response_text or response_text.strip() == "":
             response_text = "I'm sorry, I couldn't process your request. Please try again."
             print("🔍 Agent wrapper: No response text found, using fallback message")
-        
+
         print(f"🔍 Agent wrapper: Final response length: {len(response_text)}")
         print(f"🔍 Agent wrapper: Final response preview: {response_text[:200]}...")
-        
+
         # Log successful completion
         execution_time = int((time.time() - start_time) * 1000)  # Convert to milliseconds
         activity_logger.log_operation_complete(
@@ -154,9 +159,9 @@ def interactive_agent(message: str, session_id: str = None, user_id: str = "demo
                 "response_preview": response_text[:200] + "..." if len(response_text) > 200 else response_text
             }
         )
-        
+
         return response_text
-        
+
     except Exception as e:
         # Log error
         execution_time = int((time.time() - start_time) * 1000)  # Convert to milliseconds
@@ -176,7 +181,7 @@ def interactive_agent(message: str, session_id: str = None, user_id: str = "demo
                 "error_type": type(e).__name__
             }
         )
-        
+
         return f"I'm sorry, I encountered an error: {str(e)}. Please try again."
 
 

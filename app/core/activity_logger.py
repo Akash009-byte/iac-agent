@@ -15,12 +15,12 @@ from models.activity_log import ActivityLog
 
 class MongoDBLogHandler(logging.Handler):
     """Custom logging handler that stores logs in MongoDB"""
-    
+
     def __init__(self, collection_name: str = "activity_logs"):
         super().__init__()
         self.collection_name = collection_name
         self._collection = None
-        
+
     @property
     def collection(self):
         """Get MongoDB collection, initialize if needed"""
@@ -31,7 +31,7 @@ class MongoDBLogHandler(logging.Handler):
             else:
                 logger.error("Database not available for logging")
         return self._collection
-    
+
     def emit(self, record: logging.LogRecord):
         """Emit a log record to MongoDB"""
         try:
@@ -45,7 +45,7 @@ class MongoDBLogHandler(logging.Handler):
             status = getattr(record, 'status', 'in_progress')
             metadata = getattr(record, 'metadata', {})
             print(f"================Logging the logs into the collection =============>")
-            
+
             # Create log entry
             log_entry = ActivityLog(
                 timestamp=datetime.now(),
@@ -61,13 +61,13 @@ class MongoDBLogHandler(logging.Handler):
                 status=status,
                 metadata=metadata
             )
-            
+
             # Insert into MongoDB (async operation in sync context)
             if self.collection is not None:
                 print(f"================Logging the logs into the collection if=============>")
                 # Run async operation in thread pool to avoid event loop conflicts
                 import threading
-                
+
                 def insert_log():
                     try:
                         loop = asyncio.new_event_loop()
@@ -80,12 +80,12 @@ class MongoDBLogHandler(logging.Handler):
                             loop.close()
                     except Exception as e:
                         print(f"Error in thread: {e}")
-                
+
                 # Run in separate thread to avoid event loop conflicts
                 thread = threading.Thread(target=insert_log)
                 thread.daemon = True
                 thread.start()
-                    
+
         except Exception as e:
             # Don't let logging errors break the application
             logger.error(f"Error storing log in MongoDB: {e}")
@@ -93,20 +93,20 @@ class MongoDBLogHandler(logging.Handler):
 
 class ActivityLogger:
     """Activity Logger utility class"""
-    
+
     def __init__(self, name: str = "ec2forge"):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.DEBUG)
-        
+
         # Add MongoDB handler if not already present
         if not any(isinstance(h, MongoDBLogHandler) for h in self.logger.handlers):
             mongo_handler = MongoDBLogHandler()
             mongo_handler.setLevel(logging.DEBUG)
             self.logger.addHandler(mongo_handler)
-    
-    def log_operation_start(self, 
-                           tool_name: str, 
-                           operation_type: str, 
+
+    def log_operation_start(self,
+                           tool_name: str,
+                           operation_type: str,
                            message: str,
                            session_id: Optional[str] = None,
                            user_id: Optional[str] = None,
@@ -123,10 +123,10 @@ class ActivityLogger:
             'metadata': metadata or {}
         }
         self.logger.info(message, extra=extra)
-    
-    def log_operation_success(self, 
-                             tool_name: str, 
-                             operation_type: str, 
+
+    def log_operation_success(self,
+                             tool_name: str,
+                             operation_type: str,
                              message: str,
                              execution_time_ms: int,
                              session_id: Optional[str] = None,
@@ -145,10 +145,10 @@ class ActivityLogger:
             'metadata': metadata or {}
         }
         self.logger.info(message, extra=extra)
-    
-    def log_operation_error(self, 
-                           tool_name: str, 
-                           operation_type: str, 
+
+    def log_operation_error(self,
+                           tool_name: str,
+                           operation_type: str,
                            message: str,
                            error_details: Dict[str, Any],
                            session_id: Optional[str] = None,
@@ -165,10 +165,10 @@ class ActivityLogger:
             'metadata': metadata or {}
         }
         self.logger.error(message, extra=extra)
-    
-    def log_operation_complete(self, 
-                              tool_name: str, 
-                              operation_type: str, 
+
+    def log_operation_complete(self,
+                              tool_name: str,
+                              operation_type: str,
                               message: str,
                               execution_time_ms: int = None,
                               status: str = "success",
@@ -187,12 +187,12 @@ class ActivityLogger:
             'status': status,
             'metadata': metadata or {}
         }
-        
+
         if status == "success":
             self.logger.info(message, extra=extra)
         else:
             self.logger.error(message, extra=extra)
-    
+
     def log_tool_registration(self, tool_name: str, message: str):
         """Log tool registration events"""
         extra = {
@@ -201,10 +201,10 @@ class ActivityLogger:
             'status': 'success'
         }
         self.logger.debug(message, extra=extra)
-    
-    def log_tool_execution(self, 
-                          tool_name: str, 
-                          operation_type: str, 
+
+    def log_tool_execution(self,
+                          tool_name: str,
+                          operation_type: str,
                           message: str,
                           execution_time_ms: Optional[int] = None,
                           session_id: Optional[str] = None,

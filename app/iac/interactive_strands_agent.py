@@ -3,6 +3,7 @@
 Interactive Strands-based IaC Agent for AWS Infrastructure Management
 """
 
+import os
 from strands import Agent
 from strands.models.openai import OpenAIModel
 
@@ -10,8 +11,8 @@ from strands.models.openai import OpenAIModel
 from .tools import (
     # Data Collection
     get_data_collection_status,
-    
-    
+
+
     # EC2 Tools
     get_available_regions,
     get_instance_type_info,
@@ -22,7 +23,7 @@ from .tools import (
     stop_ec2_instance,
     start_ec2_instance,
     reboot_ec2_instance,
-    
+
     # Security Group Tools
     list_security_groups,
     create_security_group,
@@ -34,7 +35,7 @@ from .tools import (
     delete_security_group,
     create_web_server_security_group,
     get_current_ip_address,
-    
+
     # Pricing Tools
     get_ec2_pricing,
     compare_ec2_pricing
@@ -45,7 +46,7 @@ from .tools import (
 interactive_agent = Agent(
     model=OpenAIModel(
         client_args={
-            "api_key": "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",
+            "api_key": os.environ.get("OPENAI_API_KEY"),
         },
         model_id="gpt-4o",
         params={
@@ -56,8 +57,8 @@ interactive_agent = Agent(
     tools=[
         # Data Collection
         get_data_collection_status,
-        
-        
+
+
         # EC2 Tools
         get_available_regions,
         get_instance_type_info,
@@ -68,7 +69,7 @@ interactive_agent = Agent(
         stop_ec2_instance,
         start_ec2_instance,
         reboot_ec2_instance,
-        
+
         # Security Group Tools
         list_security_groups,
         create_security_group,
@@ -83,7 +84,7 @@ interactive_agent = Agent(
         get_ec2_pricing,
         compare_ec2_pricing,
     ],
-    system_prompt="""You are an interactive Infrastructure-as-Code assistant specialized in AWS EC2 instance and security group management. 
+    system_prompt="""You are an interactive Infrastructure-as-Code assistant specialized in AWS EC2 instance and security group management.
 You help users create and manage AWS infrastructure through a conversational interface.
 
 **CRITICAL: COST ANALYSIS & CONFIRMATION PROTOCOL**
@@ -230,17 +231,17 @@ def main():
     print("• Security group creation and rule management")
     print("• AWS resource listing and monitoring")
     print("\nLet's get started! What would you like to do?")
-    
+
     while True:
         try:
             user_input = input("\n👤 You: ")
             if user_input.lower() in ['exit', 'quit', 'bye']:
                 print("👋 Goodbye! Thanks for using the AWS Infrastructure Management Agent!")
                 break
-            
+
             response = interactive_agent.run(user_input)
             print(f"\n🤖 Agent: {response}")
-            
+
         except KeyboardInterrupt:
             print("\n👋 Goodbye! Thanks for using the AWS Infrastructure Management Agent!")
             break

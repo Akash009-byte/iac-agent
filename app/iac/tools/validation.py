@@ -8,11 +8,11 @@ from typing import Dict, List, Tuple
 def validate_required_params(params: Dict, required_fields: List[str]) -> Tuple[bool, str]:
     """
     Validate that all required parameters are provided
-    
+
     Args:
         params: Dictionary of parameters to validate
         required_fields: List of required field names
-        
+
     Returns:
         Tuple of (is_valid, error_message)
     """
@@ -20,10 +20,10 @@ def validate_required_params(params: Dict, required_fields: List[str]) -> Tuple[
     for field in required_fields:
         if field not in params or params[field] is None or params[field] == "":
             missing_fields.append(field)
-    
+
     if missing_fields:
         return False, f"Missing required parameters: {', '.join(missing_fields)}"
-    
+
     return True, ""
 
 
@@ -61,5 +61,3 @@ def validate_rule_addition_params(region: str, security_group_id: str, protocol:
         'ip_range': ip_range
     }
     return validate_required_params(params, required_fields)
-
-

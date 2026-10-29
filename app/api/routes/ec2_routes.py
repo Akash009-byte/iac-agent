@@ -26,10 +26,10 @@ async def get_instances(
 ):
     """
     Get all EC2 instances
-    
+
     Args:
         sync: If True, sync from AWS before returning results
-    
+
     Returns:
         List of EC2 instances
     """
@@ -44,7 +44,7 @@ async def get_instances(
             # Return cached data from MongoDB
             instances = await ec2_service.get_all_instances_from_db()
             return instances
-            
+
     except Exception as e:
         logger.error(f"Error getting instances: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting instances: {str(e)}")
@@ -57,10 +57,10 @@ async def get_instance(
 ):
     """
     Get specific EC2 instance by ID
-    
+
     Args:
         instance_id: EC2 instance ID
-    
+
     Returns:
         EC2 instance data
     """
@@ -69,7 +69,7 @@ async def get_instance(
         if not instance:
             raise HTTPException(status_code=404, detail=f"Instance {instance_id} not found")
         return instance
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -83,23 +83,23 @@ async def sync_instances(
 ):
     """
     Sync EC2 instances from AWS and store in MongoDB
-    
+
     Returns:
         Sync results
     """
     try:
         result = await ec2_service.sync_instances_from_aws()
-        
+
         if not result['success']:
             raise HTTPException(status_code=500, detail=result['message'])
-        
+
         return {
             "success": True,
             "message": result['message'],
             "instances_count": len(result['instances']),
             "store_results": result['store_results']
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -115,11 +115,11 @@ async def get_instances_by_region(
 ):
     """
     Get EC2 instances for a specific region
-    
+
     Args:
         region: AWS region
         sync: If True, sync from AWS before returning results
-    
+
     Returns:
         List of EC2 instances for the region
     """
@@ -135,7 +135,7 @@ async def get_instances_by_region(
             instances = await ec2_service.get_all_instances_from_db()
             region_instances = [inst for inst in instances if inst.get('region') == region]
             return region_instances
-            
+
     except Exception as e:
         logger.error(f"Error getting instances for region {region}: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting instances: {str(e)}")
@@ -148,10 +148,10 @@ async def delete_instance(
 ):
     """
     Delete EC2 instance from MongoDB
-    
+
     Args:
         instance_id: EC2 instance ID
-    
+
     Returns:
         Deletion result
     """
@@ -159,12 +159,12 @@ async def delete_instance(
         success = await ec2_service.delete_instance(instance_id)
         if not success:
             raise HTTPException(status_code=404, detail=f"Instance {instance_id} not found")
-        
+
         return {
             "success": True,
             "message": f"Instance {instance_id} deleted successfully"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -178,14 +178,14 @@ async def get_available_regions(
 ):
     """
     Get list of available AWS regions
-    
+
     Returns:
         List of AWS region names
     """
     try:
         regions = ec2_service.get_available_regions()
         return regions
-        
+
     except Exception as e:
         logger.error(f"Error getting regions: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting regions: {str(e)}")
@@ -197,19 +197,19 @@ async def get_instance_stats(
 ):
     """
     Get EC2 instance statistics
-    
+
     Returns:
         Instance statistics
     """
     try:
         instances = await ec2_service.get_all_instances_from_db()
-        
+
         # Calculate statistics
         total_instances = len(instances)
         running_instances = len([inst for inst in instances if inst.get('state') == 'running'])
         stopped_instances = len([inst for inst in instances if inst.get('state') == 'stopped'])
         pending_instances = len([inst for inst in instances if inst.get('state') == 'pending'])
-        
+
         # Group by region
         regions = {}
         for instance in instances:
@@ -217,7 +217,7 @@ async def get_instance_stats(
             if region not in regions:
                 regions[region] = 0
             regions[region] += 1
-        
+
         # Group by instance type
         instance_types = {}
         for instance in instances:
@@ -225,7 +225,7 @@ async def get_instance_stats(
             if instance_type not in instance_types:
                 instance_types[instance_type] = 0
             instance_types[instance_type] += 1
-        
+
         return {
             "total_instances": total_instances,
             "running_instances": running_instances,
@@ -234,7 +234,7 @@ async def get_instance_stats(
             "regions": regions,
             "instance_types": instance_types
         }
-        
+
     except Exception as e:
         logger.error(f"Error getting instance stats: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting stats: {str(e)}")

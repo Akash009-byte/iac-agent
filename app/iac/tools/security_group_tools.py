@@ -15,10 +15,10 @@ def get_aws_client(service_name: str, region: str):
     aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
     aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
     aws_session_token = os.getenv('AWS_SESSION_TOKEN')
-    
+
     if not aws_access_key_id or not aws_secret_access_key:
         raise ValueError("AWS credentials not found in environment variables.")
-    
+
     import boto3
     session = boto3.Session(
         aws_access_key_id=aws_access_key_id,
@@ -26,7 +26,7 @@ def get_aws_client(service_name: str, region: str):
         aws_session_token=aws_session_token,
         region_name=region
     )
-    
+
     return session.client(service_name, region_name=region)
 
 
@@ -35,16 +35,16 @@ def list_security_groups(region: str, vpc_id: Optional[str] = None) -> str:
     """List security groups in the specified region"""
     try:
         ec2 = get_aws_client("ec2", region)
-        
+
         filters = []
         if vpc_id:
             filters.append({'Name': 'vpc-id', 'Values': [vpc_id]})
-        
+
         response = ec2.describe_security_groups(Filters=filters)
-        
+
         if not response['SecurityGroups']:
             return f"No security groups found in {region}" + (f" for VPC {vpc_id}" if vpc_id else "")
-        
+
         result = f"📋 Security Groups in {region}:\n"
         for sg in response['SecurityGroups']:
             result += f"""
@@ -55,9 +55,9 @@ def list_security_groups(region: str, vpc_id: Optional[str] = None) -> str:
   Inbound Rules: {len(sg.get('IpPermissions', []))}
   Outbound Rules: {len(sg.get('IpPermissionsEgress', []))}
 """
-        
+
         return result
-        
+
     except Exception as e:
         return f"❌ Error listing security groups: {str(e)}"
 
@@ -74,19 +74,19 @@ def create_security_group(
     is_valid, error_msg = validate_security_group_creation_params(region, group_name, description)
     if not is_valid:
         return f"❌ {error_msg}. Please provide all required information before creating the security group."
-    
+
     try:
         ec2 = get_aws_client("ec2", region)
-        
+
         # Create security group
         response = ec2.create_security_group(
             GroupName=group_name,
             Description=description,
             VpcId=vpc_id
         )
-        
+
         group_id = response['GroupId']
-        
+
         return f"""✅ Security group created successfully!
 
 Security Group Details:
@@ -97,7 +97,7 @@ Security Group Details:
 
 You can now add inbound and outbound rules to this security group.
 """
-        
+
     except Exception as e:
         return f"❌ Error creating security group: {str(e)}"
 
@@ -116,10 +116,10 @@ def add_inbound_rule(
     is_valid, error_msg = validate_rule_addition_params(region, security_group_id, protocol, port, source_ip)
     if not is_valid:
         return f"❌ {error_msg}. Please provide all required information before adding the rule."
-    
+
     try:
         ec2 = get_aws_client("ec2", region)
-        
+
         # Prepare the rule
         rule = {
             'IpProtocol': protocol,
@@ -127,16 +127,16 @@ def add_inbound_rule(
             'ToPort': port,
             'IpRanges': [{'CidrIp': source_ip}]
         }
-        
+
         if description:
             rule['IpRanges'][0]['Description'] = description
-        
+
         # Add the rule
         ec2.authorize_security_group_ingress(
             GroupId=security_group_id,
             IpPermissions=[rule]
         )
-        
+
         return f"""✅ Inbound rule added successfully!
 
 Rule Details:
@@ -148,7 +148,7 @@ Rule Details:
 
 The rule is now active and will allow traffic from the specified source.
 """
-        
+
     except Exception as e:
         return f"❌ Error adding inbound rule: {str(e)}"
 
@@ -167,10 +167,10 @@ def add_outbound_rule(
     is_valid, error_msg = validate_rule_addition_params(region, security_group_id, protocol, port, destination_ip)
     if not is_valid:
         return f"❌ {error_msg}. Please provide all required information before adding the rule."
-    
+
     try:
         ec2 = get_aws_client("ec2", region)
-        
+
         # Prepare the rule
         rule = {
             'IpProtocol': protocol,
@@ -178,16 +178,16 @@ def add_outbound_rule(
             'ToPort': port,
             'IpRanges': [{'CidrIp': destination_ip}]
         }
-        
+
         if description:
             rule['IpRanges'][0]['Description'] = description
-        
+
         # Add the rule
         ec2.authorize_security_group_egress(
             GroupId=security_group_id,
             IpPermissions=[rule]
         )
-        
+
         return f"""✅ Outbound rule added successfully!
 
 Rule Details:
@@ -199,7 +199,7 @@ Rule Details:
 
 The rule is now active and will allow traffic to the specified destination.
 """
-        
+
     except Exception as e:
         return f"❌ Error adding outbound rule: {str(e)}"
 
@@ -215,7 +215,7 @@ def remove_inbound_rule(
     """Remove an inbound rule from a security group"""
     try:
         ec2 = get_aws_client("ec2", region)
-        
+
         # Prepare the rule to remove
         rule = {
             'IpProtocol': protocol,
@@ -223,13 +223,13 @@ def remove_inbound_rule(
             'ToPort': port,
             'IpRanges': [{'CidrIp': source_ip}]
         }
-        
+
         # Remove the rule
         ec2.revoke_security_group_ingress(
             GroupId=security_group_id,
             IpPermissions=[rule]
         )
-        
+
         return f"""✅ Inbound rule removed successfully!
 
 Removed Rule:
@@ -240,7 +240,7 @@ Removed Rule:
 
 The rule has been removed and traffic from this source will no longer be allowed.
 """
-        
+
     except Exception as e:
         return f"❌ Error removing inbound rule: {str(e)}"
 
@@ -256,7 +256,7 @@ def remove_outbound_rule(
     """Remove an outbound rule from a security group"""
     try:
         ec2 = get_aws_client("ec2", region)
-        
+
         # Prepare the rule to remove
         rule = {
             'IpProtocol': protocol,
@@ -264,13 +264,13 @@ def remove_outbound_rule(
             'ToPort': port,
             'IpRanges': [{'CidrIp': destination_ip}]
         }
-        
+
         # Remove the rule
         ec2.revoke_security_group_egress(
             GroupId=security_group_id,
             IpPermissions=[rule]
         )
-        
+
         return f"""✅ Outbound rule removed successfully!
 
 Removed Rule:
@@ -281,7 +281,7 @@ Removed Rule:
 
 The rule has been removed and traffic to this destination will no longer be allowed.
 """
-        
+
     except Exception as e:
         return f"❌ Error removing outbound rule: {str(e)}"
 
@@ -291,10 +291,10 @@ def get_security_group_details(region: str, security_group_id: str) -> str:
     """Get detailed information about a specific security group"""
     try:
         ec2 = get_aws_client("ec2", region)
-        
+
         response = ec2.describe_security_groups(GroupIds=[security_group_id])
         sg = response['SecurityGroups'][0]
-        
+
         result = f"""📋 Security Group Details:
 
 Basic Information:
@@ -305,35 +305,35 @@ Basic Information:
 - Owner ID: {sg['OwnerId']}
 
 Inbound Rules ({len(sg.get('IpPermissions', []))}):"""
-        
+
         for rule in sg.get('IpPermissions', []):
             protocol = rule.get('IpProtocol', 'all')
             from_port = rule.get('FromPort', 'N/A')
             to_port = rule.get('ToPort', 'N/A')
-            
+
             result += f"\n  - Protocol: {protocol}, Ports: {from_port}-{to_port}"
-            
+
             for ip_range in rule.get('IpRanges', []):
                 cidr = ip_range.get('CidrIp', 'N/A')
                 desc = ip_range.get('Description', '')
                 result += f"\n    Source: {cidr} {desc}"
-        
+
         result += f"\n\nOutbound Rules ({len(sg.get('IpPermissionsEgress', []))}):"
-        
+
         for rule in sg.get('IpPermissionsEgress', []):
             protocol = rule.get('IpProtocol', 'all')
             from_port = rule.get('FromPort', 'N/A')
             to_port = rule.get('ToPort', 'N/A')
-            
+
             result += f"\n  - Protocol: {protocol}, Ports: {from_port}-{to_port}"
-            
+
             for ip_range in rule.get('IpRanges', []):
                 cidr = ip_range.get('CidrIp', 'N/A')
                 desc = ip_range.get('Description', '')
                 result += f"\n    Destination: {cidr} {desc}"
-        
+
         return result
-        
+
     except Exception as e:
         return f"❌ Error getting security group details: {str(e)}"
 
@@ -343,17 +343,17 @@ def delete_security_group(region: str, security_group_id: str) -> str:
     """Delete a security group (only if not in use)"""
     try:
         ec2 = get_aws_client("ec2", region)
-        
+
         # Delete the security group
         ec2.delete_security_group(GroupId=security_group_id)
-        
+
         return f"""✅ Security group deleted successfully!
 
 Security Group ID: {security_group_id}
 
 Note: Security groups can only be deleted if they are not associated with any instances or other resources.
 """
-        
+
     except Exception as e:
         return f"❌ Error deleting security group: {str(e)}"
 
@@ -363,7 +363,7 @@ def create_web_server_security_group(region: str, vpc_id: Optional[str] = None) 
     """Create a pre-configured security group for web servers with common rules"""
     try:
         ec2 = get_aws_client("ec2", region)
-        
+
         # Create security group
         group_name = f"web-server-sg-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         response = ec2.create_security_group(
@@ -371,9 +371,9 @@ def create_web_server_security_group(region: str, vpc_id: Optional[str] = None) 
             Description="Security group for web servers with HTTP/HTTPS access",
             VpcId=vpc_id
         )
-        
+
         group_id = response['GroupId']
-        
+
         # Add common web server rules
         rules = [
             # SSH access
@@ -398,13 +398,13 @@ def create_web_server_security_group(region: str, vpc_id: Optional[str] = None) 
                 'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'HTTPS access'}]
             }
         ]
-        
+
         # Add inbound rules
         ec2.authorize_security_group_ingress(
             GroupId=group_id,
             IpPermissions=rules
         )
-        
+
         return f"""✅ Web server security group created successfully!
 
 Security Group Details:
@@ -420,7 +420,7 @@ Pre-configured Rules:
 
 This security group is ready to use with web servers!
 """
-        
+
     except Exception as e:
         return f"❌ Error creating web server security group: {str(e)}"
 
@@ -436,7 +436,7 @@ def get_current_ip_address() -> str:
             "https://checkip.amazonaws.com",
             "https://icanhazip.com"
         ]
-        
+
         for service in ip_services:
             try:
                 response = requests.get(service, timeout=5)
@@ -455,8 +455,8 @@ def get_current_ip_address() -> str:
 Using your specific IP address ({ip_address}/32) is more secure than using 0.0.0.0/0 (all IPs) as it restricts access to only your current location."""
             except Exception:
                 continue
-        
+
         return "❌ Unable to determine your current IP address. Please check your internet connection or specify an IP address manually."
-        
+
     except Exception as e:
         return f"❌ Error getting IP address: {str(e)}"

@@ -14,10 +14,9 @@ class Migration(BaseMigration):
             }
         ]
         self.db['note'].insert_many(initial_note)
-        
+
     def downgrade(self):
         self.db['note'].delete_many({})
-        
+
     def comment(self):
         return 'first migration with sample data for note collection'
-    

@@ -57,7 +57,7 @@ iac/
 ### Example Conversation Flow
 
 ```
-🤖 Agent: I'd like to help you create a key pair for SSH access. 
+🤖 Agent: I'd like to help you create a key pair for SSH access.
           First, which AWS region would you like to use?
 👤 User: us-east-1
 

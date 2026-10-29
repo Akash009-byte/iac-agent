@@ -45,15 +45,15 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting FastAPI application.")
-    
+
     # Try to connect to MongoDB, but don't fail startup if it fails
     try:
         await mongodb.connect_mongodb()
         logger.info("MongoDB connection successful.")
     except Exception as e:
         logger.warning(f"MongoDB connection failed: {e}. Application will continue without database.")
-    
-    yield 
+
+    yield
 
     # Try to disconnect from MongoDB
     try:
@@ -61,11 +61,19 @@ async def lifespan(app: FastAPI):
         logger.info("MongoDB disconnected.")
     except Exception as e:
         logger.warning(f"MongoDB disconnect failed: {e}")
-    
+
     logger.info("Stopping FastAPI application.")
 
 
 app = FastAPI(lifespan=lifespan)
+
+from bson.errors import InvalidId
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(InvalidId)
+async def invalid_id_handler(request, exc):
+    return JSONResponse(status_code=400, content={"detail": "Invalid resource ID"})
+
 
 
 origins = [
@@ -118,21 +126,21 @@ if WEBAPP_AVAILABLE and webapp_app:
     if WEBAPP_MODE == "full":
         # For full webapp, include router
         app.include_router(webapp_app.router, prefix="/webapp", tags=["webapp"])
-        
+
         # Add WebSocket route at root level for backward compatibility
         try:
             from webapp.webapp import websocket_endpoint
             from fastapi import WebSocket
-            
+
             @app.websocket("/ws/{user_id}")
             async def root_websocket_endpoint(websocket: WebSocket, user_id: str):
                 """WebSocket endpoint at root level for backward compatibility"""
                 await websocket_endpoint(websocket, user_id)
-            
+
             logger.info("WebSocket routes added at both /webapp/ws/ and /ws/ for compatibility")
         except ImportError as e:
             logger.warning(f"Could not import full webapp WebSocket endpoint: {e}")
-        
+
         logger.info(f"Webapp router included at /webapp (mode: {WEBAPP_MODE})")
     else:
         # For simple webapp, include its routes directly with /webapp prefix
@@ -140,15 +148,15 @@ if WEBAPP_AVAILABLE and webapp_app:
         from fastapi.responses import HTMLResponse
         from fastapi.templating import Jinja2Templates
         import os
-        
+
         # Set up templates for simple webapp routes
         templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "webapp", "templates"))
-        
+
         @app.get("/webapp/", response_class=HTMLResponse)
         async def webapp_home(request: Request):
             """Serve the webapp home page"""
-            return templates.TemplateResponse("chat.html", {"request": request})
-        
+            return templates.TemplateResponse(request=request, name="chat.html", context={})
+
         @app.get("/webapp/activity-log")
         @app.get("/webapp/activity-log/")
         @app.get("/webapp/activity_log")
@@ -159,14 +167,14 @@ if WEBAPP_AVAILABLE and webapp_app:
         @app.get("/activity_log/")
         async def webapp_activity_log(request: Request):
             """Serve the activity log page"""
-            return templates.TemplateResponse("activity_log.html", {"request": request})
-        
+            return templates.TemplateResponse(request=request, name="activity_log.html", context={})
+
         @app.get("/webapp/health")
         async def webapp_health():
             """Health check endpoint for webapp"""
             from datetime import datetime
             return {"status": "healthy", "timestamp": datetime.now().isoformat(), "mode": "demo"}
-        
+
         logger.info(f"Simple webapp routes included at /webapp (mode: {WEBAPP_MODE})")
 else:
     logger.info("Webapp not available - missing dependencies")
@@ -182,7 +190,7 @@ async def ec2forge_ui_info():
         "description": "EC2Forge - Instant AWS Instances UI",
         "features": [
             "AI-Powered Automation",
-            "Templates & Blueprints", 
+            "Templates & Blueprints",
             "Real-time Monitoring",
             "Visual Operation Progress"
         ]
@@ -198,5 +206,10 @@ if __name__ == "__main__":
     print("📊 API docs available at: http://localhost:{}/docs".format(SERVER_PORT))
     print("🔍 EC2Forge UI info: http://localhost:{}/ec2forge-ui".format(SERVER_PORT))
     print("=" * 60)
-    
+
     uvicorn.run("main:app", host="0.0.0.0", port=SERVER_PORT, reload=True)
+
+
+@app.get("/integrations/status")
+async def integration_status():
+    return {"openai": bool(os.getenv("OPENAI_API_KEY")), "aws": bool(os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))}

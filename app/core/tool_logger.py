@@ -15,7 +15,7 @@ from core.activity_logger import activity_logger
 def log_tool_usage(tool_name: str, operation_type: str = None):
     """
     Decorator to log tool usage for activity tracking
-    
+
     Args:
         tool_name: Name of the tool being called
         operation_type: Type of operation (defaults to tool_name)
@@ -27,12 +27,12 @@ def log_tool_usage(tool_name: str, operation_type: str = None):
                 op_type = tool_name
             else:
                 op_type = operation_type
-            
+
             session_id = kwargs.get('session_id', f"session_{uuid.uuid4().hex[:8]}")
             user_id = kwargs.get('user_id', "demo_user")
-            
+
             start_time = time.time()
-            
+
             # Log tool start
             activity_logger.log_operation_start(
                 tool_name=tool_name,
@@ -51,11 +51,11 @@ def log_tool_usage(tool_name: str, operation_type: str = None):
                     "operation_type": op_type
                 }
             )
-            
+
             try:
                 # Execute the original function
                 result = func(*args, **kwargs)
-                
+
                 # Log successful completion
                 execution_time = int((time.time() - start_time) * 1000)
                 activity_logger.log_operation_complete(
@@ -74,9 +74,9 @@ def log_tool_usage(tool_name: str, operation_type: str = None):
                         "result_preview": str(result)[:200] + "..." if len(str(result)) > 200 else str(result)
                     }
                 )
-                
+
                 return result
-                
+
             except Exception as e:
                 # Log error
                 execution_time = int((time.time() - start_time) * 1000)
@@ -96,10 +96,10 @@ def log_tool_usage(tool_name: str, operation_type: str = None):
                         "error_type": type(e).__name__
                     }
                 )
-                
+
                 # Re-raise the exception
                 raise e
-                
+
         return wrapper
     return decorator
 
@@ -107,12 +107,12 @@ def log_tool_usage(tool_name: str, operation_type: str = None):
 def create_logged_tool(original_func: Callable, tool_name: str, operation_type: str = None) -> Callable:
     """
     Create a logged version of a tool function
-    
+
     Args:
         original_func: The original tool function
         tool_name: Name of the tool
         operation_type: Type of operation
-    
+
     Returns:
         Logged version of the function
     """

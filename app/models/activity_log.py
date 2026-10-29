@@ -12,7 +12,7 @@ from core.mongodb import PyObjectId
 
 class ActivityLog(BaseModel):
     """Activity Log Entry Model"""
-    
+
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     timestamp: datetime = Field(default_factory=datetime.now)
     date: str = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
@@ -26,7 +26,7 @@ class ActivityLog(BaseModel):
     execution_time_ms: Optional[int] = Field(None, description="Operation duration in milliseconds")
     status: str = Field(default="in_progress", description="success, failure, in_progress")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Tool-specific metadata")
-    
+
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
@@ -37,7 +37,7 @@ class ActivityLog(BaseModel):
 
 class ActivityLogFilter(BaseModel):
     """Filter model for activity logs"""
-    
+
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     log_levels: Optional[list[str]] = None
@@ -53,7 +53,7 @@ class ActivityLogFilter(BaseModel):
 
 class ActivityLogStats(BaseModel):
     """Statistics for activity logs"""
-    
+
     total_logs: int
     logs_by_level: Dict[str, int]
     logs_by_tool: Dict[str, int]
